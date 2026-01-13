@@ -3,19 +3,21 @@ import { Play, RefreshCw } from "lucide-react";
 import { Button } from "./ui/button";
 import { ExecutionSteps } from "./ExecutionSteps";
 import { StrategyCard } from "./StrategyCard";
+import { ExecutionModeToggle } from "./ExecutionModeToggle";
 import type { Strategy, ExecutionStep, BacktestConfig } from "@/types/backtest";
+import type { ExecutionMode } from "@/certified/engine";
 
 interface BacktestExecutorProps {
   strategies: Strategy[];
-  onExecute: (config: BacktestConfig) => void;
+  onExecute: (config: BacktestConfig, mode: ExecutionMode) => void;
   isExecuting: boolean;
   executionSteps: ExecutionStep[];
 }
 
 const DATASETS = [
-  { id: 'sp500-2020-2024', label: 'S&P 500 (2020-2024)', hash: 'a7c9e3f2...8b4d1e6a' },
-  { id: 'nasdaq-2018-2024', label: 'NASDAQ 100 (2018-2024)', hash: 'f2b8c4d1...9e7a3f5c' },
-  { id: 'btc-2019-2024', label: 'BTC/USD (2019-2024)', hash: 'c5d9a2e7...4f1b8c3d' },
+  { id: 'sp500-2020-2024', label: 'S&P 500 (2020-2024)', hash: 'sha256:a7c9e3f2d8b4a1e6c5f9d2b8a3e7f4c1d9b5a2e8f6c3d7b1a4e9f5c2d8b3a6e7' },
+  { id: 'nasdaq-2018-2024', label: 'NASDAQ 100 (2018-2024)', hash: 'sha256:f2b8c4d1e9a7f5c3d8b2a6e1f4c9d5b7a3e8f2c6d1b9a4e7f3c8d2b5a1e6f9c4' },
+  { id: 'btc-2019-2024', label: 'BTC/USD (2019-2024)', hash: 'sha256:c5d9a2e7f1b4c8d3a6e9f2b5c1d7a4e8f3b6c9d2a5e1f4b7c3d8a2e6f1b9c4d5' },
 ];
 
 export function BacktestExecutor({ strategies, onExecute, isExecuting, executionSteps }: BacktestExecutorProps) {
@@ -24,6 +26,10 @@ export function BacktestExecutor({ strategies, onExecute, isExecuting, execution
   const [seed, setSeed] = useState<number>(42);
   const [startDate, setStartDate] = useState('2020-01-01');
   const [endDate, setEndDate] = useState('2024-01-01');
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>('draft');
+
+  const selectedDatasetInfo = DATASETS.find(d => d.id === selectedDataset);
+  const selectedStrategyInfo = strategies.find(s => s.id === selectedStrategy);
 
   const handleExecute = () => {
     if (!selectedStrategy) return;
@@ -34,7 +40,7 @@ export function BacktestExecutor({ strategies, onExecute, isExecuting, execution
       endDate,
       seed,
       parameters: {}
-    });
+    }, executionMode);
   };
 
   const generateSeed = () => {
@@ -45,6 +51,13 @@ export function BacktestExecutor({ strategies, onExecute, isExecuting, execution
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Configuration Panel */}
       <div className="space-y-6">
+        {/* Execution Mode Toggle */}
+        <ExecutionModeToggle
+          mode={executionMode}
+          onModeChange={setExecutionMode}
+          disabled={isExecuting}
+        />
+
         {/* Strategy Selection */}
         <div>
           <h3 className="section-header">Select Strategy</h3>
@@ -75,7 +88,7 @@ export function BacktestExecutor({ strategies, onExecute, isExecuting, execution
                 }`}
               >
                 <div className="font-medium text-sm">{dataset.label}</div>
-                <div className="text-xs text-hash font-mono mt-1">{dataset.hash}</div>
+                <div className="text-xs text-hash font-mono mt-1 truncate">{dataset.hash}</div>
               </button>
             ))}
           </div>
@@ -121,21 +134,42 @@ export function BacktestExecutor({ strategies, onExecute, isExecuting, execution
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            Deterministic seed for reproducible execution
+            {executionMode === 'certified' 
+              ? "Required for deterministic, reproducible execution"
+              : "Seed is optional in Draft mode"
+            }
           </p>
         </div>
 
         {/* Execute Button */}
         <Button
-          variant="execute"
+          variant={executionMode === 'certified' ? 'execute' : 'secondary'}
           size="lg"
           className="w-full"
           disabled={!selectedStrategy || isExecuting}
           onClick={handleExecute}
         >
           <Play className="w-4 h-4" />
-          {isExecuting ? "Executing..." : "Execute Backtest"}
+          {isExecuting 
+            ? "Executing..." 
+            : executionMode === 'certified'
+              ? "Execute Certified Backtest"
+              : "Execute Draft"
+          }
         </Button>
+
+        {/* Execution Summary for Certified Mode */}
+        {executionMode === 'certified' && selectedStrategy && selectedDatasetInfo && (
+          <div className="p-3 rounded-md bg-muted/50 border border-border text-xs space-y-1">
+            <div className="font-medium text-muted-foreground">Execution Manifest Preview</div>
+            <div className="font-mono space-y-0.5 text-muted-foreground">
+              <div>Strategy: <span className="text-hash">{selectedStrategyInfo?.codeHash.slice(0, 24)}...</span></div>
+              <div>Dataset: <span className="text-hash">{selectedDatasetInfo.hash.slice(0, 24)}...</span></div>
+              <div>Seed: <span className="text-hash">{seed}</span></div>
+              <div>Range: <span className="text-hash">{startDate} → {endDate}</span></div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Execution Progress */}
