@@ -1,0 +1,93 @@
+import { 
+  FileCode, 
+  Play, 
+  ShieldCheck, 
+  RotateCcw, 
+  Settings,
+  Database
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+interface SidebarProps {
+  activeView: string;
+  onViewChange: (view: string) => void;
+}
+
+const navItems = [
+  { id: 'strategies', label: 'Strategies', icon: FileCode },
+  { id: 'execute', label: 'Execute', icon: Play },
+  { id: 'artifacts', label: 'Artifacts', icon: ShieldCheck },
+  { id: 'verify', label: 'Verify', icon: RotateCcw },
+];
+
+const bottomItems = [
+  { id: 'datasets', label: 'Datasets', icon: Database },
+  { id: 'settings', label: 'Settings', icon: Settings },
+];
+
+export function Sidebar({ activeView, onViewChange }: SidebarProps) {
+  return (
+    <aside className="w-56 h-screen bg-sidebar border-r border-sidebar-border flex flex-col">
+      {/* Logo */}
+      <div className="p-4 border-b border-sidebar-border">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-md bg-primary/20 flex items-center justify-center">
+            <ShieldCheck className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <div className="font-semibold text-sm">NexArt</div>
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Protocol</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Nav */}
+      <nav className="flex-1 p-3">
+        <div className="space-y-1">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                onClick={() => onViewChange(item.id)}
+                className={cn(
+                  "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+                  activeView === item.id
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent/50"
+                )}
+              >
+                <Icon className="w-4 h-4" />
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
+      {/* Bottom Nav */}
+      <div className="p-3 border-t border-sidebar-border">
+        <div className="space-y-1">
+          {bottomItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                onClick={() => onViewChange(item.id)}
+                className={cn(
+                  "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+                  activeView === item.id
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent/50"
+                )}
+              >
+                <Icon className="w-4 h-4" />
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </aside>
+  );
+}
