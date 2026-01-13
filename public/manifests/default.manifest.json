@@ -1,0 +1,62 @@
+{
+  "$schema": "./manifest.schema.json",
+  "version": "1.0.0",
+  "name": "NexArt Execution Manifest",
+  "description": "Defines required parameters for certified backtest execution",
+  "parameters": {
+    "seed": {
+      "type": "integer",
+      "required": true,
+      "description": "Deterministic seed for reproducible execution",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "datasetHash": {
+      "type": "string",
+      "required": true,
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "description": "SHA-256 hash of the dataset"
+    },
+    "strategyHash": {
+      "type": "string",
+      "required": true,
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "description": "SHA-256 hash of the strategy code"
+    },
+    "startDate": {
+      "type": "string",
+      "required": true,
+      "format": "date",
+      "description": "Backtest start date (ISO 8601)"
+    },
+    "endDate": {
+      "type": "string",
+      "required": true,
+      "format": "date",
+      "description": "Backtest end date (ISO 8601)"
+    },
+    "parameters": {
+      "type": "object",
+      "required": false,
+      "description": "Strategy-specific parameters"
+    }
+  },
+  "execution": {
+    "mode": "certified",
+    "deterministic": true,
+    "replayable": true,
+    "immutable": true
+  },
+  "verification": {
+    "algorithm": "SHA-256",
+    "includes": [
+      "seed",
+      "datasetHash",
+      "strategyHash",
+      "parametersHash",
+      "startDate",
+      "endDate",
+      "timestamp"
+    ]
+  }
+}
