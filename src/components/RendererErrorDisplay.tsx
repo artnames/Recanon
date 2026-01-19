@@ -1,4 +1,4 @@
-import { AlertTriangle, ExternalLink, Info, XCircle } from "lucide-react";
+import { AlertTriangle, Info, XCircle } from "lucide-react";
 import { getCanonicalUrl } from "@/certified/canonicalClient";
 
 interface RendererErrorDisplayProps {
@@ -8,10 +8,10 @@ interface RendererErrorDisplayProps {
 
 interface ErrorInfo {
   title: string;
+  subtitle: string;
   code: string | null;
   message: string;
   howToFix: string[];
-  docsLink?: string;
 }
 
 function parseRendererError(error: string): ErrorInfo {
@@ -22,52 +22,56 @@ function parseRendererError(error: string): ErrorInfo {
   // Check for specific error patterns
   if (error.includes('INVALID_CODE') || error.toLowerCase().includes('code')) {
     return {
-      title: "Invalid Code",
+      title: "Sealed Execution Blocked",
+      subtitle: "This request violates execution rules.",
       code: "INVALID_CODE",
       message: error,
       howToFix: [
-        "Bundle must include snapshot.code as a non-empty string",
-        "Ensure the code contains valid setup() and draw() functions",
-        "Check for syntax errors in the Code Mode program",
+        "Ensure the Result includes execution code (snapshot.code)",
+        "Code must contain valid setup() and draw() functions",
+        "Or create a Result using the buttons in Start Here",
       ],
     };
   }
 
   if (error.includes('INVALID_REQUEST') || error.includes('missing')) {
     return {
-      title: "Invalid Request",
+      title: "Sealed Execution Blocked",
+      subtitle: "Required fields are missing.",
       code: "INVALID_REQUEST",
       message: error,
       howToFix: [
         "Bundle must include a complete snapshot object",
         "Required: snapshot.code, snapshot.seed, snapshot.vars",
-        "Include expectedImageHash (static) or expectedImageHash + expectedAnimationHash (loop)",
+        "Include expectedImageHash (static) or both expectedImageHash + expectedAnimationHash (loop)",
       ],
     };
   }
 
   if (error.includes('LOOP_MODE') || error.includes('frames') || error.includes('animation')) {
     return {
-      title: "Loop Mode Error",
+      title: "Loop Mode Blocked",
+      subtitle: "Animation requirements not met.",
       code: "LOOP_MODE_ERROR",
       message: error,
       howToFix: [
         "Loop mode requires execution.frames >= 2",
         "Include a draw() function that handles animation",
-        "Both expectedImageHash (poster) and expectedAnimationHash are required",
+        "Both poster and animation hashes are required for loop mode",
       ],
     };
   }
 
   if (error.includes('timeout') || error.includes('TIMEOUT')) {
     return {
-      title: "Render Timeout",
+      title: "Execution Timeout",
+      subtitle: "The render took too long to complete.",
       code: "TIMEOUT",
       message: error,
       howToFix: [
-        "The render took too long to complete",
-        "Simplify the Code Mode program",
+        "Simplify the execution code",
         "Reduce the number of frames for loop mode",
+        "Check for infinite loops in your code",
       ],
     };
   }
@@ -75,6 +79,7 @@ function parseRendererError(error: string): ErrorInfo {
   if (error.includes('fetch') || error.includes('network') || error.includes('Failed to connect') || error.includes('UNREACHABLE')) {
     return {
       title: "Renderer Unreachable",
+      subtitle: "Cannot connect to the Canonical Renderer.",
       code: "UNREACHABLE",
       message: error,
       howToFix: [
@@ -87,13 +92,14 @@ function parseRendererError(error: string): ErrorInfo {
 
   // Generic error
   return {
-    title: "Verification Request Rejected",
+    title: "Sealed Execution Blocked",
+    subtitle: "This request was rejected.",
     code,
     message: error,
     howToFix: [
       "Check that the bundle JSON is properly formatted",
       "Ensure all required fields are present",
-      "Try generating a fresh bundle using the buttons above",
+      "Try creating a fresh bundle using Start Here",
     ],
   };
 }
@@ -109,8 +115,9 @@ export function RendererErrorDisplay({ error, httpStatus }: RendererErrorDisplay
         <XCircle className="w-8 h-8 text-destructive flex-shrink-0" />
         <div>
           <h3 className="text-lg font-semibold text-destructive">{errorInfo.title}</h3>
+          <p className="text-sm text-muted-foreground mt-0.5">{errorInfo.subtitle}</p>
           {(httpStatus || errorInfo.code) && (
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-2 mt-2">
               {httpStatus && (
                 <span className="text-xs font-mono px-2 py-0.5 rounded bg-destructive/20 text-destructive">
                   HTTP {httpStatus}
@@ -126,18 +133,11 @@ export function RendererErrorDisplay({ error, httpStatus }: RendererErrorDisplay
         </div>
       </div>
 
-      {/* Error message */}
-      <div className="p-3 rounded bg-card border border-border">
-        <p className="text-sm text-muted-foreground font-mono break-all">
-          {errorInfo.message}
-        </p>
-      </div>
-
       {/* How to fix */}
       <div className="space-y-2">
         <h4 className="text-sm font-medium flex items-center gap-2">
           <Info className="w-4 h-4 text-primary" />
-          How to fix
+          Fix
         </h4>
         <ul className="text-sm text-muted-foreground space-y-1 ml-6">
           {errorInfo.howToFix.map((fix, i) => (
@@ -146,13 +146,16 @@ export function RendererErrorDisplay({ error, httpStatus }: RendererErrorDisplay
         </ul>
       </div>
 
-      {/* Renderer info */}
-      <div className="pt-3 border-t border-border text-xs text-muted-foreground">
-        <div className="flex items-center gap-2">
-          <span>Renderer:</span>
-          <code className="font-mono">{rendererUrl}</code>
+      {/* Technical details (collapsed) */}
+      <details className="text-xs text-muted-foreground">
+        <summary className="cursor-pointer hover:text-foreground">Technical details</summary>
+        <div className="mt-2 p-3 rounded bg-card border border-border font-mono break-all">
+          {errorInfo.message}
         </div>
-      </div>
+        <div className="mt-2">
+          Renderer: <code className="font-mono">{rendererUrl}</code>
+        </div>
+      </details>
     </div>
   );
 }

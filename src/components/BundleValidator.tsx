@@ -130,10 +130,10 @@ export function validateBundle(bundleJson: string): ValidationResult {
 
   // Warnings
   if (bundle._tampered) {
-    warnings.push('This bundle is marked as tampered - verification is expected to fail');
+    warnings.push('This bundle is marked as tampered — check is expected to fail');
   }
   if (bundle._note) {
-    warnings.push('This is an example bundle - hashes may not be valid');
+    warnings.push('This is an example bundle — hashes may not be valid');
   }
 
   return {
@@ -160,14 +160,14 @@ export function BundleValidator({ bundleJson, onLoadExample }: BundleValidatorPr
               <strong>What do I paste here?</strong>
             </p>
             <p className="text-sm text-muted-foreground">
-              Paste the entire exported bundle JSON from the Artifacts page, or use the <strong>Generate Verified</strong> buttons above to create a valid bundle.
+              Paste the entire exported bundle JSON from Sealed Results, or use the <strong>Create Result</strong> buttons above to create a valid bundle.
             </p>
             <Button variant="outline" size="sm" onClick={onLoadExample} className="mt-2">
               <FileText className="w-4 h-4 mr-2" />
               Load Example Bundle
             </Button>
             <p className="text-xs text-muted-foreground italic mt-1">
-              Example bundles have placeholder hashes — verification will fail until you generate a real bundle.
+              Example bundles have placeholder hashes — checking will fail until you create a real result.
             </p>
           </div>
         </div>
@@ -211,7 +211,7 @@ export function BundleValidator({ bundleJson, onLoadExample }: BundleValidatorPr
               ))}
             </ul>
             <p className="text-xs text-muted-foreground mt-2">
-              Use the <strong>Generate Verified</strong> buttons above to create a complete bundle.
+              Use the <strong>Create Result</strong> buttons above to create a complete bundle.
             </p>
           </div>
         </div>
@@ -247,7 +247,7 @@ export function BundleValidator({ bundleJson, onLoadExample }: BundleValidatorPr
       <div className="flex items-center gap-2">
         <CheckCircle2 className="w-4 h-4 text-verified" />
         <p className="text-sm text-verified">
-          Bundle is valid ({validation.mode} mode) — ready to verify
+          Bundle is valid ({validation.mode} mode) — ready to check
         </p>
       </div>
     </div>

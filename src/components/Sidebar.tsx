@@ -16,11 +16,11 @@ interface SidebarProps {
 }
 
 const navItems = [
+  { id: 'guide', label: 'Start Here', icon: BookOpen },
   { id: 'strategies', label: 'Strategies', icon: FileCode },
   { id: 'execute', label: 'Execute', icon: Play },
-  { id: 'artifacts', label: 'Artifacts', icon: ShieldCheck },
-  { id: 'guide', label: 'How It Works', icon: BookOpen },
-  { id: 'verify', label: 'Verify & Test', icon: RotateCcw },
+  { id: 'artifacts', label: 'Sealed Results', icon: ShieldCheck },
+  { id: 'verify', label: 'Check & Test', icon: RotateCcw },
 ];
 
 const bottomItems = [

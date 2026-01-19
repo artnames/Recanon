@@ -191,9 +191,9 @@ export function VerifyPanel() {
     <div className="max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold mb-2">Verify & Test</h2>
+          <h2 className="text-xl font-semibold mb-2">Check & Test</h2>
           <p className="text-sm text-muted-foreground">
-            Verify certified artifacts, generate proof bundles, and explore the CLI.
+            Check sealed results, create proof bundles, and explore the CLI.
           </p>
         </div>
       </div>
@@ -206,9 +206,9 @@ export function VerifyPanel() {
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="live" className="flex items-center gap-2">
             <Zap className="w-3.5 h-3.5" />
-            Live Verifier
+            Live Checker
           </TabsTrigger>
-          <TabsTrigger value="verify">Verify Bundle</TabsTrigger>
+          <TabsTrigger value="verify">Check Bundle</TabsTrigger>
           <TabsTrigger value="guide" className="flex items-center gap-2">
             <BookOpen className="w-3.5 h-3.5" />
             Quick Guide
@@ -253,7 +253,7 @@ export function VerifyPanel() {
                   setBundleJson(e.target.value);
                   setResult(null);
                 }}
-                placeholder='Paste artifact bundle JSON here or use "Generate Verified" above...'
+                placeholder='Paste sealed result bundle JSON here or use "Create Result" above...'
                 className="w-full h-48 px-3 py-2 rounded-md bg-input border border-border text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary resize-none"
               />
             </div>
@@ -263,7 +263,7 @@ export function VerifyPanel() {
               <BundleValidator bundleJson={bundleJson} onLoadExample={handleLoadExample} />
             </div>
 
-            {/* Verify Button */}
+            {/* Check Button */}
             <Button 
               variant="default" 
               onClick={handleVerifyBundle}
@@ -273,12 +273,12 @@ export function VerifyPanel() {
               {isVerifying ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Verifying via Canonical Renderer...
+                  Checking via Canonical Renderer...
                 </>
               ) : (
                 <>
                   <Search className="w-4 h-4 mr-2" />
-                  Verify Bundle
+                  Check Result
                 </>
               )}
             </Button>
@@ -286,7 +286,7 @@ export function VerifyPanel() {
             {/* Disabled reason hint */}
             {!canVerify && !isVerifying && bundleJson.trim() && (
               <p className="text-xs text-muted-foreground mt-2">
-                Fix the validation errors above to enable verification.
+                Fix the validation errors above to enable checking.
               </p>
             )}
           </div>
@@ -307,7 +307,7 @@ export function VerifyPanel() {
                       <>
                         <ShieldCheck className="w-8 h-8 text-verified" />
                         <div>
-                          <div className="text-lg font-semibold text-verified font-mono">VERIFIED</div>
+                          <div className="text-lg font-semibold text-verified font-mono">PASSED</div>
                           <div className="text-sm text-muted-foreground">
                             All checks passed via Canonical Renderer
                             {result.rendererVersion && ` (v${result.rendererVersion})`}

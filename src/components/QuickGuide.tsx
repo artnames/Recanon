@@ -35,9 +35,9 @@ export function QuickGuide() {
           <li className="flex items-start gap-3">
             <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-semibold">1</span>
             <div>
-              <span className="font-medium">Configure canonical renderer URL</span>
+              <span className="font-medium">Configure Canonical Renderer URL</span>
               <p className="text-muted-foreground text-xs mt-0.5">
-                Set via environment variable or use the "Edit" button in the header
+                Set via environment variable or use the "Edit" button in Settings
               </p>
             </div>
           </li>
@@ -53,18 +53,18 @@ export function QuickGuide() {
           <li className="flex items-start gap-3">
             <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-semibold">3</span>
             <div>
-              <span className="font-medium">Generate a proof bundle</span>
+              <span className="font-medium">Create a sealed result</span>
               <p className="text-muted-foreground text-xs mt-0.5">
-                Use "Generate VERIFIED" buttons to create real certified bundles via canonical renderer.
+                Use "Create Result" buttons to generate sealed bundles via Canonical Renderer.
               </p>
             </div>
           </li>
           <li className="flex items-start gap-3">
             <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-semibold">4</span>
             <div>
-              <span className="font-medium">Verify the bundle</span>
+              <span className="font-medium">Check the result</span>
               <p className="text-muted-foreground text-xs mt-0.5">
-                Click "Verify Bundle" — should return <span className="text-verified font-mono">VERIFIED</span>.
+                Click "Check Result" — should return <span className="text-verified font-mono">PASSED</span>.
               </p>
             </div>
           </li>
@@ -73,7 +73,7 @@ export function QuickGuide() {
             <div>
               <span className="font-medium">Test tampering detection</span>
               <p className="text-muted-foreground text-xs mt-0.5">
-                Use "Generate FAILED Proof" to see hash mismatch in action.
+                Use "Create Failed (Tampered)" to see hash mismatch in action.
               </p>
             </div>
           </li>
@@ -82,23 +82,23 @@ export function QuickGuide() {
             <div>
               <span className="font-medium">Export and share</span>
               <p className="text-muted-foreground text-xs mt-0.5">
-                Download bundle JSON for third-party verification or CLI replay.
+                Download bundle JSON for third-party checking or CLI replay.
               </p>
             </div>
           </li>
         </ol>
       </div>
 
-      {/* What is Verified */}
+      {/* What is Checked */}
       <div className="p-4 rounded-md border border-border bg-card">
         <h3 className="section-header flex items-center gap-2">
           <ShieldCheck className="w-4 h-4" />
-          What Gets Verified
+          What Gets Checked
         </h3>
         <ul className="space-y-2 text-sm text-muted-foreground">
           <li className="flex items-start gap-2">
             <CheckCircle2 className="w-4 h-4 text-verified mt-0.5 flex-shrink-0" />
-            <span><strong className="text-foreground">Code</strong> — The exact Code Mode program source is re-executed.</span>
+            <span><strong className="text-foreground">Code</strong> — The exact program source is re-executed.</span>
           </li>
           <li className="flex items-start gap-2">
             <CheckCircle2 className="w-4 h-4 text-verified mt-0.5 flex-shrink-0" />
@@ -115,24 +115,28 @@ export function QuickGuide() {
         </ul>
       </div>
 
-      {/* Protocol Rules */}
+      {/* Execution Rules */}
       <div className="p-4 rounded-md border border-warning/30 bg-warning/5">
         <h3 className="section-header flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 text-warning" />
-          Protocol Rules
+          Execution Rules
         </h3>
         <ul className="space-y-2 text-sm text-muted-foreground">
           <li className="flex items-start gap-2">
             <span className="text-warning font-bold">•</span>
-            <span><strong className="text-foreground">createCanvas() is forbidden</strong> — The Canonical Renderer provides the canvas (1950×2400). Your code must not call <code className="font-mono text-xs bg-muted px-1 rounded">createCanvas()</code>.</span>
+            <span><strong className="text-foreground">Canvas is provided</strong> — The Canonical Renderer provides a 1950×2400 canvas. Do not call <code className="font-mono text-xs bg-muted px-1 rounded">createCanvas()</code>.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="text-warning font-bold">•</span>
-            <span><strong className="text-foreground">Use width/height from runtime</strong> — Reference the global <code className="font-mono text-xs bg-muted px-1 rounded">width</code> and <code className="font-mono text-xs bg-muted px-1 rounded">height</code> variables instead of hardcoding dimensions.</span>
+            <span><strong className="text-foreground">Inputs must match</strong> — Identical code, seed, and vars reproduce identical outputs.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="text-warning font-bold">•</span>
-            <span><strong className="text-foreground">Deterministic only</strong> — No Date.now(), Math.random(), or external fetches. Use SEED for randomness.</span>
+            <span><strong className="text-foreground">Static = 1 hash</strong> — A single output image produces one hash.</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-warning font-bold">•</span>
+            <span><strong className="text-foreground">Loop = 2 hashes</strong> — Animation outputs require both poster hash and animation hash.</span>
           </li>
         </ul>
       </div>
@@ -162,7 +166,7 @@ export function QuickGuide() {
               <li>• Animation output (MP4) + poster (PNG)</li>
               <li>• Two hashes: <code className="font-mono">posterHash</code> + <code className="font-mono">animationHash</code></li>
               <li>• <code className="font-mono">verificationRequirements: "loop-requires-both-hashes"</code></li>
-              <li className="text-warning">• Both hashes must verify for VERIFIED status</li>
+              <li className="text-warning">• Both hashes must pass for PASSED status</li>
             </ul>
           </div>
         </div>
