@@ -174,7 +174,14 @@ export async function runCertifiedBacktest(
     }
   );
 
-  // Step 3: Call Canonical Renderer (NO FALLBACK)
+  // Step 3: Preflight validation - block createCanvas() calls
+  if (snapshot.code.includes('createCanvas(')) {
+    throw new Error(
+      'createCanvas() is not allowed in canonical execution. Canvas is fixed to 1950×2400 by the Canonical Renderer.'
+    );
+  }
+
+  // Step 4: Call Canonical Renderer (NO FALLBACK)
   const renderResult = await renderCertified(snapshot);
 
   if (!renderResult.success || !renderResult.data) {
