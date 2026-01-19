@@ -119,48 +119,52 @@ export function VerifyPanel() {
           mode: verifyResult.mode,
           error: verifyResult.error,
         });
-      } else if (verifyResult.verified && verifyResult.data) {
+      } else if (verifyResult.verified) {
         setResult({
           status: 'verified',
           mode: verifyResult.mode,
           // Static fields
-          originalHash: verifyResult.data.originalHash,
-          computedHash: verifyResult.data.computedHash,
+          originalHash: verifyResult.expectedHash,
+          computedHash: verifyResult.computedHash,
           // Loop fields
-          posterVerified: verifyResult.data.posterVerified,
-          expectedPosterHash: verifyResult.data.expectedPosterHash,
-          computedPosterHash: verifyResult.data.computedPosterHash,
-          animationVerified: verifyResult.data.animationVerified,
-          expectedAnimationHash: verifyResult.data.expectedAnimationHash,
-          computedAnimationHash: verifyResult.data.computedAnimationHash,
-          hashMatchType: verifyResult.data.hashMatchType,
+          posterVerified: verifyResult.posterVerified,
+          expectedPosterHash: verifyResult.expectedPosterHash,
+          computedPosterHash: verifyResult.computedPosterHash,
+          animationVerified: verifyResult.animationVerified,
+          expectedAnimationHash: verifyResult.expectedAnimationHash,
+          computedAnimationHash: verifyResult.computedAnimationHash,
+          hashMatchType: verifyResult.hashMatchType,
           // Common
-          matchDetails: verifyResult.data.matchDetails,
-          rendererVersion: verifyResult.data.rendererVersion,
-          nodeVersion: verifyResult.data.nodeVersion,
-        });
-      } else if (verifyResult.data) {
-        setResult({
-          status: 'mismatch',
-          mode: verifyResult.mode,
-          originalHash: verifyResult.data.originalHash,
-          computedHash: verifyResult.data.computedHash,
-          posterVerified: verifyResult.data.posterVerified,
-          expectedPosterHash: verifyResult.data.expectedPosterHash,
-          computedPosterHash: verifyResult.data.computedPosterHash,
-          animationVerified: verifyResult.data.animationVerified,
-          expectedAnimationHash: verifyResult.data.expectedAnimationHash,
-          computedAnimationHash: verifyResult.data.computedAnimationHash,
-          hashMatchType: verifyResult.data.hashMatchType,
-          matchDetails: verifyResult.data.matchDetails,
-          rendererVersion: verifyResult.data.rendererVersion,
-          nodeVersion: verifyResult.data.nodeVersion,
+          matchDetails: {
+            codeMatch: verifyResult.verified,
+            seedMatch: verifyResult.verified,
+            varsMatch: verifyResult.verified,
+            outputMatch: verifyResult.verified,
+          },
+          rendererVersion: verifyResult.metadata?.rendererVersion,
+          nodeVersion: verifyResult.metadata?.nodeVersion,
         });
       } else {
         setResult({
-          status: 'error',
-          mode: isLoop ? 'loop' : 'static',
-          error: 'Unknown verification error',
+          status: 'mismatch',
+          mode: verifyResult.mode,
+          originalHash: verifyResult.expectedHash,
+          computedHash: verifyResult.computedHash,
+          posterVerified: verifyResult.posterVerified,
+          expectedPosterHash: verifyResult.expectedPosterHash,
+          computedPosterHash: verifyResult.computedPosterHash,
+          animationVerified: verifyResult.animationVerified,
+          expectedAnimationHash: verifyResult.expectedAnimationHash,
+          computedAnimationHash: verifyResult.computedAnimationHash,
+          hashMatchType: verifyResult.hashMatchType,
+          matchDetails: {
+            codeMatch: false,
+            seedMatch: false,
+            varsMatch: false,
+            outputMatch: false,
+          },
+          rendererVersion: verifyResult.metadata?.rendererVersion,
+          nodeVersion: verifyResult.metadata?.nodeVersion,
         });
       }
     } catch (error) {

@@ -103,14 +103,15 @@ export function LiveVerifier() {
       const renderResult = await renderCertified(snapshot);
       const latencyMs = Math.round(performance.now() - start);
 
-      if (renderResult.success && renderResult.data?.imageHash) {
-        setExpectedHash(renderResult.data.imageHash);
-        if (isLoopMode && renderResult.data.animationHash) {
-          setExpectedAnimationHash(renderResult.data.animationHash);
+      if (renderResult.success && renderResult.data) {
+        const data = renderResult.data;
+        setExpectedHash(data.imageHash);
+        if (isLoopMode && data.animationHash) {
+          setExpectedAnimationHash(data.animationHash);
         }
         toast({
           title: "Baseline rendered",
-          description: `Hash: ${renderResult.data.imageHash.slice(0, 16)}... (${latencyMs}ms)`,
+          description: `Hash: ${data.imageHash.slice(0, 16)}... (${latencyMs}ms)`,
         });
       } else {
         toast({
@@ -175,14 +176,14 @@ export function LiveVerifier() {
           mode: verifyResult.mode,
           latencyMs,
           rendererUrl: getCanonicalUrl(),
-          expectedHash: verifyResult.data?.originalHash,
-          computedHash: verifyResult.data?.computedHash,
-          posterVerified: verifyResult.data?.posterVerified,
-          expectedPosterHash: verifyResult.data?.expectedPosterHash,
-          computedPosterHash: verifyResult.data?.computedPosterHash,
-          animationVerified: verifyResult.data?.animationVerified,
-          expectedAnimationHash: verifyResult.data?.expectedAnimationHash,
-          computedAnimationHash: verifyResult.data?.computedAnimationHash,
+          expectedHash: verifyResult.expectedHash,
+          computedHash: verifyResult.computedHash,
+          posterVerified: verifyResult.posterVerified,
+          expectedPosterHash: verifyResult.expectedPosterHash,
+          computedPosterHash: verifyResult.computedPosterHash,
+          animationVerified: verifyResult.animationVerified,
+          expectedAnimationHash: verifyResult.expectedAnimationHash,
+          computedAnimationHash: verifyResult.computedAnimationHash,
           rawResponse: verifyResult,
         });
       } else {
@@ -191,14 +192,14 @@ export function LiveVerifier() {
           mode: verifyResult.mode,
           latencyMs,
           rendererUrl: getCanonicalUrl(),
-          expectedHash: verifyResult.data?.originalHash || expectedHash,
-          computedHash: verifyResult.data?.computedHash,
-          posterVerified: verifyResult.data?.posterVerified,
-          expectedPosterHash: verifyResult.data?.expectedPosterHash,
-          computedPosterHash: verifyResult.data?.computedPosterHash,
-          animationVerified: verifyResult.data?.animationVerified,
-          expectedAnimationHash: verifyResult.data?.expectedAnimationHash,
-          computedAnimationHash: verifyResult.data?.computedAnimationHash,
+          expectedHash: verifyResult.expectedHash || expectedHash,
+          computedHash: verifyResult.computedHash,
+          posterVerified: verifyResult.posterVerified,
+          expectedPosterHash: verifyResult.expectedPosterHash,
+          computedPosterHash: verifyResult.computedPosterHash,
+          animationVerified: verifyResult.animationVerified,
+          expectedAnimationHash: verifyResult.expectedAnimationHash,
+          computedAnimationHash: verifyResult.computedAnimationHash,
           rawResponse: verifyResult,
         });
       }

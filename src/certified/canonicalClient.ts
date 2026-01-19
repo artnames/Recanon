@@ -52,71 +52,121 @@ export interface CanonicalSnapshot {
 }
 
 /**
- * Response from POST /render endpoint
+ * Metadata returned from the Canonical Renderer
+ */
+export interface CanonicalMetadata {
+  protocol?: string;
+  protocolVersion?: string;
+  sdkVersion?: string;
+  nodeVersion?: string;
+  rendererVersion?: string;
+  timestamp?: string;
+  deterministic?: boolean;
+}
+
+/**
+ * Raw response from POST /render endpoint (static mode)
+ * The renderer returns flat JSON, not wrapped in {success, data}
+ */
+export interface RawRenderResponseStatic {
+  type: 'static';
+  mime: 'image/png';
+  imageHash: string;
+  imageBase64: string;
+  metadata: CanonicalMetadata;
+}
+
+/**
+ * Raw response from POST /render endpoint (loop mode)
+ * The renderer returns flat JSON, not wrapped in {success, data}
+ */
+export interface RawRenderResponseLoop {
+  type: 'animation';
+  mime: 'video/mp4';
+  animationHash: string;
+  animationBase64: string;
+  posterHash: string;
+  posterBase64: string;
+  imageHash: string;  // Same as posterHash (for compatibility)
+  imageBase64: string; // Same as posterBase64 (for compatibility)
+  frames: number;
+  fps: number;
+  width: number;
+  height: number;
+  metadata: CanonicalMetadata;
+}
+
+/**
+ * Union type for raw render responses
+ */
+export type RawRenderResponse = RawRenderResponseStatic | RawRenderResponseLoop;
+
+/**
+ * Normalized response from renderCertified()
+ * Provides consistent interface regardless of static/loop mode
+ */
+export interface NormalizedRenderResult {
+  mode: 'static' | 'loop';
+  /** SHA-256 hash of static PNG or poster PNG */
+  imageHash: string;
+  /** Base64 encoded PNG (static image or poster frame) */
+  outputBase64: string;
+  /** MIME type of primary output */
+  mime: 'image/png' | 'video/mp4';
+  /** Animation hash (loop mode only) */
+  animationHash?: string;
+  /** Base64 encoded MP4 (loop mode only) */
+  animationBase64?: string;
+  /** Frame count (loop mode only) */
+  frames?: number;
+  /** FPS (loop mode only) */
+  fps?: number;
+  /** Canvas dimensions (loop mode only) */
+  width?: number;
+  height?: number;
+  /** Node metadata */
+  metadata: CanonicalMetadata;
+}
+
+/**
+ * Response wrapper from renderCertified()
+ * Either success with data or error with message
  */
 export interface CanonicalRenderResponse {
   success: boolean;
   error?: string;
-  data?: {
-    /** Unique artifact identifier */
-    artifactId: string;
-    /** SHA-256 hash of the raw output bytes (PNG for static, poster PNG for loop) */
-    imageHash: string;
-    /** Animation hash if loop=true (SHA-256 of MP4 bytes) */
-    animationHash?: string;
-    /** Base64 encoded output (PNG or MP4 poster frame) */
-    outputBase64: string;
-    /** Base64 encoded animation if loop=true */
-    animationBase64?: string;
-    /** MIME type of output */
-    mimeType: 'image/png' | 'video/mp4';
-    /** Node metadata */
-    metadata: {
-      protocol: string;
-      protocolVersion: string;
-      sdkVersion: string;
-      nodeVersion: string;
-      rendererVersion: string;
-      timestamp: string;
-      deterministic: boolean;
-    };
-    /** Computed metrics from the visualization */
-    computedMetrics?: {
-      totalReturn: number;
-      cagr: number;
-      maxDrawdown: number;
-      volatility: number;
-      finalEquity: number;
-      sharpeEstimate: number;
-    };
-  };
+  data?: NormalizedRenderResult;
 }
 
 /**
- * Request body for POST /verify endpoint (static mode)
+ * Raw response from POST /verify endpoint (static mode)
  */
-export interface CanonicalVerifyRequestStatic {
-  snapshot: CanonicalSnapshot;
+export interface RawVerifyResponseStatic {
+  verified: boolean;
+  computedHash: string;
   expectedHash: string;
+  protocolCompliant?: boolean;
+  metadata?: CanonicalMetadata;
 }
 
 /**
- * Request body for POST /verify endpoint (loop mode)
- * Loop mode REQUIRES both hashes - never use expectedHash alone
+ * Raw response from POST /verify endpoint (loop mode)
  */
-export interface CanonicalVerifyRequestLoop {
-  snapshot: CanonicalSnapshot;
+export interface RawVerifyResponseLoop {
+  mode: 'loop';
+  verified: boolean;
+  posterVerified: boolean;
+  animationVerified: boolean;
+  computedPosterHash: string;
+  computedAnimationHash: string;
   expectedPosterHash: string;
   expectedAnimationHash: string;
+  hashMatchType?: 'exact' | 'partial' | 'none';
+  metadata?: CanonicalMetadata;
 }
 
 /**
- * Unified verify request type
- */
-export type CanonicalVerifyRequest = CanonicalVerifyRequestStatic | CanonicalVerifyRequestLoop;
-
-/**
- * Response from POST /verify endpoint
+ * Normalized response from POST /verify endpoint
  */
 export interface CanonicalVerifyResponse {
   /** Execution mode detected */
@@ -124,31 +174,22 @@ export interface CanonicalVerifyResponse {
   /** Overall verification status */
   verified: boolean;
   error?: string;
-  data?: {
-    /** For static mode */
-    originalHash?: string;
-    computedHash?: string;
-    /** For loop mode - poster verification */
-    posterVerified?: boolean;
-    expectedPosterHash?: string;
-    computedPosterHash?: string;
-    /** For loop mode - animation verification */
-    animationVerified?: boolean;
-    expectedAnimationHash?: string;
-    computedAnimationHash?: string;
-    /** How hashes matched */
-    hashMatchType?: 'exact' | 'partial' | 'none';
-    /** Standard match details */
-    matchDetails: {
-      codeMatch: boolean;
-      seedMatch: boolean;
-      varsMatch: boolean;
-      outputMatch: boolean;
-    };
-    timestamp: string;
-    rendererVersion: string;
-    nodeVersion: string;
-  };
+  /** For static mode */
+  expectedHash?: string;
+  computedHash?: string;
+  protocolCompliant?: boolean;
+  /** For loop mode - poster verification */
+  posterVerified?: boolean;
+  expectedPosterHash?: string;
+  computedPosterHash?: string;
+  /** For loop mode - animation verification */
+  animationVerified?: boolean;
+  expectedAnimationHash?: string;
+  computedAnimationHash?: string;
+  /** How hashes matched */
+  hashMatchType?: 'exact' | 'partial' | 'none';
+  /** Metadata from renderer */
+  metadata?: CanonicalMetadata;
 }
 
 // ============================================================
@@ -189,11 +230,21 @@ export async function isCanonicalRendererAvailable(): Promise<boolean> {
 
 /**
  * Check health with detailed error info
+ * /health returns: { status, node, version, sdk_version, protocol_version, canvas, timestamp }
  */
 export async function checkCanonicalHealth(): Promise<{
   available: boolean;
   latency?: number;
   error?: string;
+  healthData?: {
+    status?: string;
+    node?: string;
+    version?: string;
+    sdk_version?: string;
+    protocol_version?: string;
+    canvas?: { width: number; height: number };
+    timestamp?: string;
+  };
 }> {
   const url = getCanonicalUrl();
   const start = performance.now();
@@ -206,11 +257,13 @@ export async function checkCanonicalHealth(): Promise<{
     const latency = Math.round(performance.now() - start);
     
     if (response.ok) {
-      return { available: true, latency };
+      const healthData = await response.json();
+      return { available: true, latency, healthData };
     } else {
+      const errorText = await response.text();
       return { 
         available: false, 
-        error: `HTTP ${response.status}: ${response.statusText}` 
+        error: `HTTP ${response.status}: ${errorText || response.statusText}` 
       };
     }
   } catch (error) {
@@ -238,6 +291,8 @@ export function getCanonicalRendererInfo(): {
  * Render a certified backtest via the Canonical Renderer
  * 
  * POST /render
+ * 
+ * Returns normalized result with consistent fields for static/loop modes
  */
 export async function renderCertified(
   snapshot: CanonicalSnapshot
@@ -269,9 +324,42 @@ export async function renderCertified(
       };
     }
 
-    const result = await response.json();
-    console.log('[Canonical Client] Render success:', result.data?.artifactId);
-    return result as CanonicalRenderResponse;
+    // Parse flat response from renderer
+    const raw = await response.json() as RawRenderResponse;
+    console.log('[Canonical Client] Render success, type:', raw.type);
+    
+    // Normalize to consistent interface
+    if (raw.type === 'animation') {
+      // Loop mode: use posterHash as imageHash (canonical poster hash)
+      return {
+        success: true,
+        data: {
+          mode: 'loop',
+          imageHash: raw.posterHash, // Use posterHash as the canonical poster hash
+          outputBase64: raw.posterBase64,
+          mime: 'image/png', // Poster is always PNG
+          animationHash: raw.animationHash,
+          animationBase64: raw.animationBase64,
+          frames: raw.frames,
+          fps: raw.fps,
+          width: raw.width,
+          height: raw.height,
+          metadata: raw.metadata,
+        },
+      };
+    } else {
+      // Static mode
+      return {
+        success: true,
+        data: {
+          mode: 'static',
+          imageHash: raw.imageHash,
+          outputBase64: raw.imageBase64,
+          mime: 'image/png',
+          metadata: raw.metadata,
+        },
+      };
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('[Canonical Client] Network error:', message);
@@ -287,6 +375,7 @@ export async function renderCertified(
  * 
  * POST /verify
  * Request: { snapshot, expectedHash }
+ * Response: { verified, computedHash, expectedHash, protocolCompliant, metadata }
  */
 export async function verifyCertifiedStatic(
   snapshot: CanonicalSnapshot,
@@ -313,8 +402,17 @@ export async function verifyCertifiedStatic(
       };
     }
 
-    const result = await response.json();
-    return { mode: 'static', ...result } as CanonicalVerifyResponse;
+    // Parse flat response
+    const raw = await response.json() as RawVerifyResponseStatic;
+    
+    return {
+      mode: 'static',
+      verified: raw.verified,
+      expectedHash: raw.expectedHash,
+      computedHash: raw.computedHash,
+      protocolCompliant: raw.protocolCompliant,
+      metadata: raw.metadata,
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return {
@@ -333,6 +431,8 @@ export async function verifyCertifiedStatic(
  * 
  * POST /verify
  * Request: { snapshot, expectedPosterHash, expectedAnimationHash }
+ * Response: { mode, verified, posterVerified, animationVerified, computedPosterHash, 
+ *             computedAnimationHash, expectedPosterHash, expectedAnimationHash, hashMatchType, metadata }
  */
 export async function verifyCertifiedLoop(
   snapshot: CanonicalSnapshot,
@@ -364,8 +464,21 @@ export async function verifyCertifiedLoop(
       };
     }
 
-    const result = await response.json();
-    return { mode: 'loop', ...result } as CanonicalVerifyResponse;
+    // Parse flat response
+    const raw = await response.json() as RawVerifyResponseLoop;
+    
+    return {
+      mode: 'loop',
+      verified: raw.verified,
+      posterVerified: raw.posterVerified,
+      animationVerified: raw.animationVerified,
+      expectedPosterHash: raw.expectedPosterHash,
+      computedPosterHash: raw.computedPosterHash,
+      expectedAnimationHash: raw.expectedAnimationHash,
+      computedAnimationHash: raw.computedAnimationHash,
+      hashMatchType: raw.hashMatchType,
+      metadata: raw.metadata,
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return {
