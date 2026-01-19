@@ -21,6 +21,7 @@ import {
   type CanonicalVerifyResponse,
 } from './canonicalClient';
 import { DEFAULT_VARS, type CodeModeVars } from './codeModeProgram';
+import { validateNoCreateCanvas } from './codeValidator';
 
 // Re-export for external access
 export { 
@@ -174,22 +175,11 @@ export async function runCertifiedBacktest(
     }
   );
 
-  // Step 3: Preflight validation - block createCanvas() calls
-  if (snapshot.code.includes('createCanvas(')) {
-    // Find line number where createCanvas occurs
-    const lines = snapshot.code.split('\n');
-    let foundLine = -1;
-    let foundCode = '';
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].includes('createCanvas(')) {
-        foundLine = i + 1; // 1-indexed
-        foundCode = lines[i].trim();
-        break;
-      }
-    }
-    
-    const lineInfo = foundLine > 0 
-      ? `\n\nFound at line ${foundLine}:\n  ${foundCode}`
+  // Step 3: Preflight validation - block createCanvas() calls (ignoring comments)
+  const canvasValidation = validateNoCreateCanvas(snapshot.code);
+  if (!canvasValidation.valid) {
+    const lineInfo = canvasValidation.lineNumber 
+      ? `\n\nFound at line ${canvasValidation.lineNumber}:\n  ${canvasValidation.lineContent}`
       : '';
     
     throw new Error(
