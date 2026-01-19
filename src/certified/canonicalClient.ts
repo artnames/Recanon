@@ -14,7 +14,8 @@ import { varsToArray, DEFAULT_VARS, generateBacktestCodeModeProgram } from './co
 
 /**
  * Canonical Renderer URL
- * Configure via environment variable or default to localhost for development
+ * Configure via environment variable VITE_CANONICAL_RENDERER_URL
+ * Falls back to localhost:5000 for local development only
  */
 export const CANONICAL_RENDERER_URL = 
   import.meta.env.VITE_CANONICAL_RENDERER_URL || 
