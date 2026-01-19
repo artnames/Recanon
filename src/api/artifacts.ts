@@ -7,25 +7,25 @@
  * In production, these would be real HTTP endpoints.
  */
 
-import type { ArtifactBundle, VerificationApiResult } from '@/types/artifactBundle';
-import { verifyBundle, parseBundle } from '@/certified/bundleExport';
+import type { CertifiedArtifactBundle, VerificationResult } from '@/types/certifiedArtifact';
+import { verifyCertified } from '@/certified/canonicalClient';
 
 // In-memory artifact store (mock database)
-const artifactStore = new Map<string, ArtifactBundle>();
+const artifactStore = new Map<string, CertifiedArtifactBundle>();
 
 /**
  * Registers an artifact bundle in the store
  */
-export function registerArtifact(bundle: ArtifactBundle): void {
-  artifactStore.set(bundle.artifactId, bundle);
+export function registerArtifact(bundle: CertifiedArtifactBundle): void {
+  const id = bundle.snapshot.metadata?.strategyId || `artifact-${Date.now()}`;
+  artifactStore.set(id, bundle);
 }
 
 /**
  * GET /api/artifacts/:id
  * Returns full artifact JSON
  */
-export async function getArtifact(id: string): Promise<ArtifactBundle | null> {
-  // Simulate network latency
+export async function getArtifact(id: string): Promise<CertifiedArtifactBundle | null> {
   await new Promise(resolve => setTimeout(resolve, 100));
   return artifactStore.get(id) ?? null;
 }
@@ -34,36 +34,28 @@ export async function getArtifact(id: string): Promise<ArtifactBundle | null> {
  * GET /api/artifacts/:id/bundle
  * Returns the export bundle JSON
  */
-export async function getArtifactBundle(id: string): Promise<ArtifactBundle | null> {
-  // Same as getArtifact for now - in production might have different access controls
+export async function getArtifactBundle(id: string): Promise<CertifiedArtifactBundle | null> {
   return getArtifact(id);
 }
 
 /**
  * POST /api/verify
- * Replays via certified engine and returns verification result
- * 
- * Accepts either:
- * - { artifactId: string } - looks up and verifies stored artifact
- * - { bundle: ArtifactBundle } - verifies provided bundle directly
- * - { verificationHash: string } - looks up by hash
+ * Calls Canonical Renderer to verify artifact
  */
 export async function verifyArtifact(
-  params: { artifactId?: string; verificationHash?: string; bundle?: ArtifactBundle }
-): Promise<VerificationApiResult> {
-  // Simulate network latency
+  params: { artifactId?: string; expectedHash?: string; bundle?: CertifiedArtifactBundle }
+): Promise<VerificationResult> {
   await new Promise(resolve => setTimeout(resolve, 200));
   
-  let bundle: ArtifactBundle | null = null;
+  let bundle: CertifiedArtifactBundle | null = null;
   
   if (params.bundle) {
     bundle = params.bundle;
   } else if (params.artifactId) {
     bundle = await getArtifact(params.artifactId);
-  } else if (params.verificationHash) {
-    // Search by verification hash
+  } else if (params.expectedHash) {
     for (const stored of artifactStore.values()) {
-      if (stored.verification.verificationHash === params.verificationHash) {
+      if (stored.expectedImageHash === params.expectedHash) {
         bundle = stored;
         break;
       }
@@ -73,47 +65,62 @@ export async function verifyArtifact(
   if (!bundle) {
     return {
       verified: false,
-      artifactId: params.artifactId ?? 'UNKNOWN',
-      originalHash: params.verificationHash ?? 'UNKNOWN',
+      originalHash: params.expectedHash ?? 'UNKNOWN',
       computedHash: 'N/A',
+      matchDetails: {
+        codeMatch: false,
+        seedMatch: false,
+        varsMatch: false,
+        outputMatch: false,
+      },
+      rendererVersion: 'N/A',
+      nodeVersion: 'N/A',
       timestamp: new Date().toISOString(),
-      mismatches: [{ field: 'artifact', expected: 'exists', actual: 'not_found' }],
-      message: 'Artifact not found. Cannot verify.',
+      error: 'Artifact not found. Cannot verify.',
     };
   }
   
-  // Use the bundle verification logic
-  return verifyBundle(bundle);
-}
-
-/**
- * Verify from JSON string (used by CLI)
- */
-export async function verifyBundleFromJson(json: string): Promise<VerificationApiResult> {
-  try {
-    const bundle = parseBundle(json);
-    return verifyBundle(bundle);
-  } catch (error) {
+  // Verify via Canonical Renderer
+  const result = await verifyCertified(bundle.snapshot, bundle.expectedImageHash);
+  
+  if (result.error) {
     return {
       verified: false,
-      artifactId: 'PARSE_ERROR',
-      originalHash: 'N/A',
+      originalHash: bundle.expectedImageHash,
       computedHash: 'N/A',
+      matchDetails: {
+        codeMatch: false,
+        seedMatch: false,
+        varsMatch: false,
+        outputMatch: false,
+      },
+      rendererVersion: 'N/A',
+      nodeVersion: 'N/A',
       timestamp: new Date().toISOString(),
-      mismatches: [{ 
-        field: 'json', 
-        expected: 'valid bundle', 
-        actual: error instanceof Error ? error.message : 'Invalid JSON' 
-      }],
-      message: `Failed to parse bundle: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error: result.error,
     };
   }
+  
+  return {
+    verified: result.verified,
+    originalHash: result.data?.originalHash ?? bundle.expectedImageHash,
+    computedHash: result.data?.computedHash ?? 'N/A',
+    matchDetails: result.data?.matchDetails ?? {
+      codeMatch: false,
+      seedMatch: false,
+      varsMatch: false,
+      outputMatch: false,
+    },
+    rendererVersion: result.data?.rendererVersion ?? 'N/A',
+    nodeVersion: result.data?.nodeVersion ?? 'N/A',
+    timestamp: result.data?.timestamp ?? new Date().toISOString(),
+  };
 }
 
 /**
  * List all stored artifacts (for demo/testing)
  */
-export async function listArtifacts(): Promise<ArtifactBundle[]> {
+export async function listArtifacts(): Promise<CertifiedArtifactBundle[]> {
   await new Promise(resolve => setTimeout(resolve, 50));
   return Array.from(artifactStore.values());
 }
