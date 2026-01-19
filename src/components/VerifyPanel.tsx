@@ -1,11 +1,15 @@
 import { useState } from "react";
-import { Search, ShieldCheck, AlertTriangle, CheckCircle2, Loader2, Upload, Info } from "lucide-react";
+import { Search, ShieldCheck, AlertTriangle, CheckCircle2, Loader2, Upload, Info, BookOpen } from "lucide-react";
 import { Button } from "./ui/button";
 import { HashDisplay } from "./HashDisplay";
+import { CanonicalRendererStatus } from "./CanonicalHealthBadge";
+import { QuickGuide } from "./QuickGuide";
+import { ProofGenerators } from "./ProofGenerators";
+import { CLIExamples } from "./CLIExamples";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { 
   verifyCertifiedStatic,
   verifyCertifiedLoop,
-  getCanonicalRendererInfo,
   isLoopMode,
   type CanonicalSnapshot,
   type CanonicalVerifyResponse,
@@ -41,8 +45,12 @@ export function VerifyPanel() {
   const [bundleJson, setBundleJson] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [result, setResult] = useState<VerificationState | null>(null);
+  const [activeTab, setActiveTab] = useState('verify');
 
-  const rendererInfo = getCanonicalRendererInfo();
+  const handleBundleGenerated = (json: string) => {
+    setBundleJson(json);
+    setResult(null);
+  };
 
   const handleVerifyBundle = async () => {
     if (!bundleJson.trim()) return;
@@ -176,30 +184,36 @@ export function VerifyPanel() {
   };
 
   return (
-    <div className="max-w-2xl space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold mb-2">Verify Certified Artifact</h2>
-        <p className="text-sm text-muted-foreground">
-          Upload or paste a Certified Artifact bundle to verify it via the Canonical Renderer.
-          No fallback. No mock. Server-side execution only.
-        </p>
+    <div className="max-w-3xl space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold mb-2">Verify & Test</h2>
+          <p className="text-sm text-muted-foreground">
+            Verify certified artifacts, generate proof bundles, and explore the CLI.
+          </p>
+        </div>
       </div>
 
-      {/* Renderer Info */}
-      <div className="p-3 rounded-md bg-card border border-border">
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">Canonical Renderer:</span>
-          <code className="font-mono text-xs bg-muted px-2 py-1 rounded">
-            {rendererInfo.url}
-          </code>
-        </div>
-        <div className="flex items-center justify-between text-sm mt-1">
-          <span className="text-muted-foreground">Status:</span>
-          <span className={rendererInfo.configured ? 'text-verified' : 'text-warning'}>
-            {rendererInfo.configured ? 'Configured' : 'Using default (localhost)'}
-          </span>
-        </div>
-      </div>
+      {/* Renderer Status with Health Badge */}
+      <CanonicalRendererStatus />
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="verify">Verify Bundle</TabsTrigger>
+          <TabsTrigger value="guide" className="flex items-center gap-2">
+            <BookOpen className="w-3.5 h-3.5" />
+            Quick Guide
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="guide" className="mt-6">
+          <QuickGuide />
+        </TabsContent>
+
+        <TabsContent value="verify" className="mt-6 space-y-6">
+          {/* One-Click Proof Generators */}
+          <ProofGenerators onBundleGenerated={handleBundleGenerated} />
 
       {/* Bundle Input */}
       <div>
@@ -456,6 +470,9 @@ export function VerifyPanel() {
         </div>
       )}
 
+      {/* CLI Examples */}
+      <CLIExamples />
+
       {/* Instructions */}
       <div className="p-4 rounded-md bg-card border border-border">
         <h4 className="font-medium text-sm mb-2">How Verification Works</h4>
@@ -481,6 +498,8 @@ export function VerifyPanel() {
           No browser SDK. No PRNG mirror. Server-side determinism only.
         </p>
       </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
