@@ -134,6 +134,17 @@ export function LiveVerifier() {
   const handleVerify = useCallback(async () => {
     if (jsonError || !expectedHash) return;
 
+    // In loop mode, we MUST have both hashes
+    if (isLoopMode && !expectedAnimationHash) {
+      setResult({
+        status: 'error',
+        mode: 'loop',
+        rendererUrl: getCanonicalUrl(),
+        error: 'Loop mode requires both poster and animation hashes. Click "Get Baseline Hash" first.',
+      });
+      return;
+    }
+
     setIsVerifying(true);
 
     try {
