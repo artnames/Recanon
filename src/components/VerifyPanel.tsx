@@ -4,7 +4,6 @@ import { Button } from "./ui/button";
 import { HashDisplay } from "./HashDisplay";
 import { 
   verifyCertified, 
-  verifyBundleViaCanonical,
   getCanonicalRendererInfo,
   type CanonicalSnapshot 
 } from "@/certified/canonicalClient";
