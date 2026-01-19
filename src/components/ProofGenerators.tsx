@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { ShieldCheck, Play, AlertTriangle, Loader2, Video, Image } from "lucide-react";
+import { ShieldCheck, AlertTriangle, Loader2, Video, Image } from "lucide-react";
 import { Button } from "./ui/button";
 import { 
   renderCertified, 
-  CANONICAL_RENDERER_URL,
+  getCanonicalUrl,
   type CanonicalSnapshot 
 } from "@/certified/canonicalClient";
 
@@ -165,7 +165,7 @@ export function ProofGenerators({ onBundleGenerated }: ProofGeneratorsProps) {
         expectedImageHash: result.data.imageHash,
         verificationRequirements: 'static-single-hash' as const,
         canonical: {
-          url: CANONICAL_RENDERER_URL,
+          url: getCanonicalUrl(),
           rendererVersion: result.data.metadata.rendererVersion,
           protocolVersion: result.data.metadata.protocolVersion,
         },
@@ -222,7 +222,7 @@ export function ProofGenerators({ onBundleGenerated }: ProofGeneratorsProps) {
         expectedAnimationHash: result.data.animationHash,
         verificationRequirements: 'loop-requires-both-hashes' as const,
         canonical: {
-          url: CANONICAL_RENDERER_URL,
+          url: getCanonicalUrl(),
           rendererVersion: result.data.metadata.rendererVersion,
           protocolVersion: result.data.metadata.protocolVersion,
         },

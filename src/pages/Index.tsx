@@ -14,7 +14,7 @@ import {
   runCertifiedBacktest,
   runDraftBacktest,
   getCanonicalRendererInfo,
-  CANONICAL_RENDERER_URL,
+  getCanonicalUrl,
   type ExecutionMode, 
   type CertifiedExecutionResult,
   type DraftExecutionResult,
@@ -129,7 +129,7 @@ export default function Index() {
         sealed: true,
         createdAt: certifiedResult.canonicalMetadata.timestamp,
       },
-      CANONICAL_RENDERER_URL,
+      getCanonicalUrl(),
       true
     );
     downloadBundle(bundle, certifiedResult.artifactId);

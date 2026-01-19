@@ -14,7 +14,7 @@ import {
   verifyCertified,
   isCanonicalRendererAvailable,
   getCanonicalRendererInfo,
-  CANONICAL_RENDERER_URL,
+  getCanonicalUrl,
   createBacktestSnapshot,
   type CanonicalSnapshot,
   type CanonicalRenderResponse,
@@ -25,8 +25,8 @@ import { DEFAULT_VARS, type CodeModeVars } from './codeModeProgram';
 // Re-export for external access
 export { 
   isCanonicalRendererAvailable, 
-  getCanonicalRendererInfo, 
-  CANONICAL_RENDERER_URL,
+  getCanonicalRendererInfo,
+  getCanonicalUrl,
   type CanonicalSnapshot,
   type CanonicalRenderResponse,
   type CanonicalVerifyResponse,
@@ -192,7 +192,7 @@ export async function runCertifiedBacktest(
     outputBase64: renderResult.data.outputBase64,
     mimeType: renderResult.data.mimeType,
     sealed: true,
-    replayCommand: `curl -X POST ${CANONICAL_RENDERER_URL}/verify -H "Content-Type: application/json" -d '{"snapshot": ${JSON.stringify(snapshot)}, "expectedHash": "${renderResult.data.imageHash}"}'`,
+    replayCommand: `curl -X POST ${getCanonicalUrl()}/verify -H "Content-Type: application/json" -d '{"snapshot": ${JSON.stringify(snapshot)}, "expectedHash": "${renderResult.data.imageHash}"}'`,
     metrics: renderResult.data.computedMetrics,
     canonicalMetadata: {
       protocol: renderResult.data.metadata.protocol,
@@ -200,7 +200,7 @@ export async function runCertifiedBacktest(
       sdkVersion: renderResult.data.metadata.sdkVersion,
       nodeVersion: renderResult.data.metadata.nodeVersion,
       rendererVersion: renderResult.data.metadata.rendererVersion,
-      rendererUrl: CANONICAL_RENDERER_URL,
+      rendererUrl: getCanonicalUrl(),
       timestamp: renderResult.data.metadata.timestamp,
       deterministic: renderResult.data.metadata.deterministic,
     },

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Terminal, Copy, Check, ChevronDown } from "lucide-react";
 import { Button } from "./ui/button";
 import {
@@ -7,7 +7,7 @@ import {
   CollapsibleTrigger,
 } from "./ui/collapsible";
 import { cn } from "@/lib/utils";
-import { CANONICAL_RENDERER_URL } from "@/certified/canonicalClient";
+import { getCanonicalUrl } from "@/certified/canonicalClient";
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -47,8 +47,9 @@ function CodeBlock({ code, language = 'bash' }: { code: string; language?: strin
 
 export function CLIExamples() {
   const [isOpen, setIsOpen] = useState(false);
+  const canonicalUrl = useMemo(() => getCanonicalUrl(), []);
 
-  const renderStaticCurl = `curl -X POST ${CANONICAL_RENDERER_URL}/render \\
+  const renderStaticCurl = `curl -X POST ${canonicalUrl}/render \\
   -H "Content-Type: application/json" \\
   -d '{
     "snapshot": {
@@ -59,7 +60,7 @@ export function CLIExamples() {
     }
   }'`;
 
-  const verifyStaticCurl = `curl -X POST ${CANONICAL_RENDERER_URL}/verify \\
+  const verifyStaticCurl = `curl -X POST ${canonicalUrl}/verify \\
   -H "Content-Type: application/json" \\
   -d '{
     "snapshot": {
@@ -71,7 +72,7 @@ export function CLIExamples() {
     "expectedHash": "sha256:YOUR_IMAGE_HASH_HERE"
   }'`;
 
-  const renderLoopCurl = `curl -X POST ${CANONICAL_RENDERER_URL}/render \\
+  const renderLoopCurl = `curl -X POST ${canonicalUrl}/render \\
   -H "Content-Type: application/json" \\
   -d '{
     "snapshot": {
@@ -82,7 +83,7 @@ export function CLIExamples() {
     }
   }'`;
 
-  const verifyLoopCurl = `curl -X POST ${CANONICAL_RENDERER_URL}/verify \\
+  const verifyLoopCurl = `curl -X POST ${canonicalUrl}/verify \\
   -H "Content-Type: application/json" \\
   -d '{
     "snapshot": {
@@ -112,7 +113,7 @@ export function CLIExamples() {
       <CollapsibleContent>
         <div className="mt-2 p-4 rounded-md border border-border bg-card space-y-6">
           <p className="text-xs text-muted-foreground">
-            Using renderer at: <code className="font-mono bg-muted px-1 rounded">{CANONICAL_RENDERER_URL}</code>
+            Using renderer at: <code className="font-mono bg-muted px-1 rounded">{canonicalUrl}</code>
           </p>
 
           {/* Render Static */}
