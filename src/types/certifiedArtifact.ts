@@ -33,6 +33,13 @@ export interface BacktestMetrics {
 }
 
 /**
+ * Verification requirements indicator
+ */
+export type VerificationRequirements = 
+  | 'static-single-hash'
+  | 'loop-requires-both-hashes';
+
+/**
  * Certified Artifact structure
  * 
  * This is the complete artifact produced by a certified execution.
@@ -48,7 +55,7 @@ export interface CertifiedArtifact {
   /** The snapshot used for execution */
   snapshot: CanonicalSnapshot;
   
-  /** SHA-256 hash of the output image bytes */
+  /** SHA-256 hash of the output image bytes (poster for loop mode) */
   imageHash: string;
   
   /** SHA-256 hash of animation if loop=true */
@@ -56,6 +63,9 @@ export interface CertifiedArtifact {
   
   /** Base64 encoded output (PNG or MP4 poster) */
   outputBase64: string;
+  
+  /** Base64 encoded animation if loop=true */
+  animationBase64?: string;
   
   /** MIME type of the output */
   mimeType: 'image/png' | 'video/mp4';
@@ -77,6 +87,7 @@ export interface CertifiedArtifact {
  * Certified Artifact Export Bundle
  * 
  * Portable JSON format for sharing and verification.
+ * For loop mode, both poster and animation hashes are required.
  */
 export interface CertifiedArtifactBundle {
   /** Bundle format version */
@@ -88,11 +99,24 @@ export interface CertifiedArtifactBundle {
   /** The complete snapshot */
   snapshot: CanonicalSnapshot;
   
-  /** Expected image hash for verification */
+  /** 
+   * Expected image/poster hash for verification 
+   * For static: the single image hash
+   * For loop: the poster frame hash
+   */
   expectedImageHash: string;
   
-  /** Expected animation hash (if applicable) */
+  /** 
+   * Expected animation hash (required for loop mode)
+   * Loop verification requires BOTH hashes
+   */
   expectedAnimationHash?: string;
+  
+  /**
+   * Verification requirements indicator
+   * Tells verifiers what hashes are required
+   */
+  verificationRequirements: VerificationRequirements;
   
   /** Node metadata at time of creation */
   nodeMetadata: CanonicalNodeMetadata;
@@ -103,6 +127,9 @@ export interface CertifiedArtifactBundle {
   /** Optional: base64 output for offline viewing */
   outputBase64?: string;
   
+  /** Optional: base64 animation for offline viewing (loop mode) */
+  animationBase64?: string;
+  
   /** Optional: computed metrics */
   metrics?: BacktestMetrics;
 }
@@ -111,9 +138,24 @@ export interface CertifiedArtifactBundle {
  * Verification result from the Canonical Renderer
  */
 export interface VerificationResult {
+  /** Execution mode */
+  mode: 'static' | 'loop';
+  /** Overall verification status */
   verified: boolean;
-  originalHash: string;
-  computedHash: string;
+  /** For static mode */
+  originalHash?: string;
+  computedHash?: string;
+  /** For loop mode - poster verification */
+  posterVerified?: boolean;
+  expectedPosterHash?: string;
+  computedPosterHash?: string;
+  /** For loop mode - animation verification */
+  animationVerified?: boolean;
+  expectedAnimationHash?: string;
+  computedAnimationHash?: string;
+  /** How hashes matched */
+  hashMatchType?: 'exact' | 'partial' | 'none';
+  /** Standard match details */
   matchDetails: {
     codeMatch: boolean;
     seedMatch: boolean;
@@ -127,6 +169,13 @@ export interface VerificationResult {
 }
 
 /**
+ * Check if artifact is loop mode
+ */
+export function isLoopArtifact(artifact: CertifiedArtifact): boolean {
+  return artifact.snapshot.execution?.loop === true;
+}
+
+/**
  * Creates an export bundle from a certified artifact
  */
 export function createExportBundle(
@@ -134,15 +183,19 @@ export function createExportBundle(
   canonicalUrl: string,
   includeOutput: boolean = false
 ): CertifiedArtifactBundle {
+  const isLoop = isLoopArtifact(artifact);
+  
   return {
     bundleVersion: '2.0.0',
     canonicalUrl,
     snapshot: artifact.snapshot,
     expectedImageHash: artifact.imageHash,
-    expectedAnimationHash: artifact.animationHash,
+    expectedAnimationHash: isLoop ? artifact.animationHash : undefined,
+    verificationRequirements: isLoop ? 'loop-requires-both-hashes' : 'static-single-hash',
     nodeMetadata: artifact.nodeMetadata,
     timestamp: artifact.createdAt,
     outputBase64: includeOutput ? artifact.outputBase64 : undefined,
+    animationBase64: includeOutput && isLoop ? artifact.animationBase64 : undefined,
     metrics: artifact.metrics,
   };
 }

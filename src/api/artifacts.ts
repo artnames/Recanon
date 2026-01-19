@@ -8,7 +8,7 @@
  */
 
 import type { CertifiedArtifactBundle, VerificationResult } from '@/types/certifiedArtifact';
-import { verifyCertified } from '@/certified/canonicalClient';
+import { verifyCertifiedStatic, verifyCertifiedLoop, isLoopMode } from '@/certified/canonicalClient';
 
 // In-memory artifact store (mock database)
 const artifactStore = new Map<string, CertifiedArtifactBundle>();
@@ -41,6 +41,9 @@ export async function getArtifactBundle(id: string): Promise<CertifiedArtifactBu
 /**
  * POST /api/verify
  * Calls Canonical Renderer to verify artifact
+ * 
+ * For loop mode: uses verifyCertifiedLoop with both hashes
+ * For static mode: uses verifyCertifiedStatic with single hash
  */
 export async function verifyArtifact(
   params: { artifactId?: string; expectedHash?: string; bundle?: CertifiedArtifactBundle }
@@ -64,9 +67,9 @@ export async function verifyArtifact(
   
   if (!bundle) {
     return {
+      mode: 'static',
       verified: false,
-      originalHash: params.expectedHash ?? 'UNKNOWN',
-      computedHash: 'N/A',
+      originalHash: params.expectedHash,
       matchDetails: {
         codeMatch: false,
         seedMatch: false,
@@ -80,41 +83,112 @@ export async function verifyArtifact(
     };
   }
   
-  // Verify via Canonical Renderer
-  const result = await verifyCertified(bundle.snapshot, bundle.expectedImageHash);
+  const isLoop = isLoopMode(bundle.snapshot);
   
-  if (result.error) {
+  // Verify via Canonical Renderer using appropriate method
+  if (isLoop) {
+    // Loop mode: MUST use both hashes
+    if (!bundle.expectedAnimationHash) {
+      return {
+        mode: 'loop',
+        verified: false,
+        expectedPosterHash: bundle.expectedImageHash,
+        matchDetails: {
+          codeMatch: false,
+          seedMatch: false,
+          varsMatch: false,
+          outputMatch: false,
+        },
+        rendererVersion: 'N/A',
+        nodeVersion: 'N/A',
+        timestamp: new Date().toISOString(),
+        error: 'Loop verification requires both poster and animation hashes. Missing expectedAnimationHash.',
+      };
+    }
+    
+    const result = await verifyCertifiedLoop(
+      bundle.snapshot, 
+      bundle.expectedImageHash, 
+      bundle.expectedAnimationHash
+    );
+    
+    if (result.error) {
+      return {
+        mode: 'loop',
+        verified: false,
+        expectedPosterHash: bundle.expectedImageHash,
+        expectedAnimationHash: bundle.expectedAnimationHash,
+        matchDetails: {
+          codeMatch: false,
+          seedMatch: false,
+          varsMatch: false,
+          outputMatch: false,
+        },
+        rendererVersion: 'N/A',
+        nodeVersion: 'N/A',
+        timestamp: new Date().toISOString(),
+        error: result.error,
+      };
+    }
+    
     return {
-      verified: false,
-      originalHash: bundle.expectedImageHash,
-      computedHash: 'N/A',
-      matchDetails: {
+      mode: 'loop',
+      verified: result.verified,
+      posterVerified: result.data?.posterVerified,
+      expectedPosterHash: result.data?.expectedPosterHash ?? bundle.expectedImageHash,
+      computedPosterHash: result.data?.computedPosterHash,
+      animationVerified: result.data?.animationVerified,
+      expectedAnimationHash: result.data?.expectedAnimationHash ?? bundle.expectedAnimationHash,
+      computedAnimationHash: result.data?.computedAnimationHash,
+      hashMatchType: result.data?.hashMatchType,
+      matchDetails: result.data?.matchDetails ?? {
         codeMatch: false,
         seedMatch: false,
         varsMatch: false,
         outputMatch: false,
       },
-      rendererVersion: 'N/A',
-      nodeVersion: 'N/A',
-      timestamp: new Date().toISOString(),
-      error: result.error,
+      rendererVersion: result.data?.rendererVersion ?? 'N/A',
+      nodeVersion: result.data?.nodeVersion ?? 'N/A',
+      timestamp: result.data?.timestamp ?? new Date().toISOString(),
+    };
+  } else {
+    // Static mode: use single hash
+    const result = await verifyCertifiedStatic(bundle.snapshot, bundle.expectedImageHash);
+    
+    if (result.error) {
+      return {
+        mode: 'static',
+        verified: false,
+        originalHash: bundle.expectedImageHash,
+        matchDetails: {
+          codeMatch: false,
+          seedMatch: false,
+          varsMatch: false,
+          outputMatch: false,
+        },
+        rendererVersion: 'N/A',
+        nodeVersion: 'N/A',
+        timestamp: new Date().toISOString(),
+        error: result.error,
+      };
+    }
+    
+    return {
+      mode: 'static',
+      verified: result.verified,
+      originalHash: result.data?.originalHash ?? bundle.expectedImageHash,
+      computedHash: result.data?.computedHash,
+      matchDetails: result.data?.matchDetails ?? {
+        codeMatch: false,
+        seedMatch: false,
+        varsMatch: false,
+        outputMatch: false,
+      },
+      rendererVersion: result.data?.rendererVersion ?? 'N/A',
+      nodeVersion: result.data?.nodeVersion ?? 'N/A',
+      timestamp: result.data?.timestamp ?? new Date().toISOString(),
     };
   }
-  
-  return {
-    verified: result.verified,
-    originalHash: result.data?.originalHash ?? bundle.expectedImageHash,
-    computedHash: result.data?.computedHash ?? 'N/A',
-    matchDetails: result.data?.matchDetails ?? {
-      codeMatch: false,
-      seedMatch: false,
-      varsMatch: false,
-      outputMatch: false,
-    },
-    rendererVersion: result.data?.rendererVersion ?? 'N/A',
-    nodeVersion: result.data?.nodeVersion ?? 'N/A',
-    timestamp: result.data?.timestamp ?? new Date().toISOString(),
-  };
 }
 
 /**

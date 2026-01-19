@@ -17,6 +17,7 @@ interface CertifiedArtifactProps {
 }
 
 // Convert legacy artifact to new bundle format for export
+// Legacy artifacts are always static mode (no animation)
 function convertToBundle(artifact: ArtifactType): CertifiedArtifactBundle {
   return {
     bundleVersion: '2.0.0',
@@ -33,6 +34,7 @@ function convertToBundle(artifact: ArtifactType): CertifiedArtifactBundle {
       },
     },
     expectedImageHash: artifact.verificationHash,
+    verificationRequirements: 'static-single-hash',
     nodeMetadata: {
       protocol: 'nexart',
       protocolVersion: '1.2.0',

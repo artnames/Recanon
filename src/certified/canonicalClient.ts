@@ -58,12 +58,14 @@ export interface CanonicalRenderResponse {
   data?: {
     /** Unique artifact identifier */
     artifactId: string;
-    /** SHA-256 hash of the raw output bytes (PNG/MP4) */
+    /** SHA-256 hash of the raw output bytes (PNG for static, poster PNG for loop) */
     imageHash: string;
-    /** Animation hash if loop=true */
+    /** Animation hash if loop=true (SHA-256 of MP4 bytes) */
     animationHash?: string;
     /** Base64 encoded output (PNG or MP4 poster frame) */
     outputBase64: string;
+    /** Base64 encoded animation if loop=true */
+    animationBase64?: string;
     /** MIME type of output */
     mimeType: 'image/png' | 'video/mp4';
     /** Node metadata */
@@ -89,22 +91,52 @@ export interface CanonicalRenderResponse {
 }
 
 /**
- * Request body for POST /verify endpoint
+ * Request body for POST /verify endpoint (static mode)
  */
-export interface CanonicalVerifyRequest {
+export interface CanonicalVerifyRequestStatic {
   snapshot: CanonicalSnapshot;
   expectedHash: string;
 }
 
 /**
+ * Request body for POST /verify endpoint (loop mode)
+ * Loop mode REQUIRES both hashes - never use expectedHash alone
+ */
+export interface CanonicalVerifyRequestLoop {
+  snapshot: CanonicalSnapshot;
+  expectedPosterHash: string;
+  expectedAnimationHash: string;
+}
+
+/**
+ * Unified verify request type
+ */
+export type CanonicalVerifyRequest = CanonicalVerifyRequestStatic | CanonicalVerifyRequestLoop;
+
+/**
  * Response from POST /verify endpoint
  */
 export interface CanonicalVerifyResponse {
+  /** Execution mode detected */
+  mode: 'static' | 'loop';
+  /** Overall verification status */
   verified: boolean;
   error?: string;
   data?: {
-    originalHash: string;
-    computedHash: string;
+    /** For static mode */
+    originalHash?: string;
+    computedHash?: string;
+    /** For loop mode - poster verification */
+    posterVerified?: boolean;
+    expectedPosterHash?: string;
+    computedPosterHash?: string;
+    /** For loop mode - animation verification */
+    animationVerified?: boolean;
+    expectedAnimationHash?: string;
+    computedAnimationHash?: string;
+    /** How hashes matched */
+    hashMatchType?: 'exact' | 'partial' | 'none';
+    /** Standard match details */
     matchDetails: {
       codeMatch: boolean;
       seedMatch: boolean;
@@ -169,28 +201,6 @@ export function getCanonicalRendererInfo(): {
  * Render a certified backtest via the Canonical Renderer
  * 
  * POST ${CANONICAL_RENDERER_URL}/render
- * 
- * Request body:
- * {
- *   "snapshot": {
- *     "code": "function setup() {...} function draw() {...}",
- *     "seed": 42,
- *     "vars": [50, 55, 30, 50, 10, 50, 20, 40, 30, 70],
- *     "execution": { "frames": 1, "loop": false }
- *   }
- * }
- * 
- * Response:
- * {
- *   "success": true,
- *   "data": {
- *     "artifactId": "CBT-xxx",
- *     "imageHash": "sha256:...",
- *     "outputBase64": "iVBORw0KGgo...",
- *     "mimeType": "image/png",
- *     "metadata": { protocol, protocolVersion, sdkVersion, nodeVersion, ... }
- *   }
- * }
  */
 export async function renderCertified(
   snapshot: CanonicalSnapshot
@@ -226,30 +236,12 @@ export async function renderCertified(
 }
 
 /**
- * Verify a certified result via the Canonical Renderer
+ * Verify a static (non-loop) certified result via the Canonical Renderer
  * 
  * POST ${CANONICAL_RENDERER_URL}/verify
- * 
- * Request body:
- * {
- *   "snapshot": { code, seed, vars, execution },
- *   "expectedHash": "sha256:..."
- * }
- * 
- * Response:
- * {
- *   "verified": true/false,
- *   "data": {
- *     "originalHash": "sha256:...",
- *     "computedHash": "sha256:...",
- *     "matchDetails": { codeMatch, seedMatch, varsMatch, outputMatch },
- *     "timestamp": "2024-...",
- *     "rendererVersion": "1.0.0",
- *     "nodeVersion": "20.x.x"
- *   }
- * }
+ * Request: { snapshot, expectedHash }
  */
-export async function verifyCertified(
+export async function verifyCertifiedStatic(
   snapshot: CanonicalSnapshot,
   expectedHash: string
 ): Promise<CanonicalVerifyResponse> {
@@ -267,20 +259,90 @@ export async function verifyCertified(
     if (!response.ok) {
       const errorText = await response.text();
       return {
+        mode: 'static',
         verified: false,
         error: `Canonical Renderer error (${response.status}): ${errorText}`,
       };
     }
 
     const result = await response.json();
-    return result as CanonicalVerifyResponse;
+    return { mode: 'static', ...result } as CanonicalVerifyResponse;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return {
+      mode: 'static',
       verified: false,
       error: `Failed to connect to Canonical Renderer at ${url}: ${message}`,
     };
   }
+}
+
+/**
+ * Verify a loop certified result via the Canonical Renderer
+ * 
+ * Loop verification REQUIRES both poster AND animation hashes.
+ * Never use expectedHash for loop mode.
+ * 
+ * POST ${CANONICAL_RENDERER_URL}/verify
+ * Request: { snapshot, expectedPosterHash, expectedAnimationHash }
+ */
+export async function verifyCertifiedLoop(
+  snapshot: CanonicalSnapshot,
+  expectedPosterHash: string,
+  expectedAnimationHash: string
+): Promise<CanonicalVerifyResponse> {
+  const url = `${CANONICAL_RENDERER_URL}/verify`;
+  
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        snapshot, 
+        expectedPosterHash, 
+        expectedAnimationHash 
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return {
+        mode: 'loop',
+        verified: false,
+        error: `Canonical Renderer error (${response.status}): ${errorText}`,
+      };
+    }
+
+    const result = await response.json();
+    return { mode: 'loop', ...result } as CanonicalVerifyResponse;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      mode: 'loop',
+      verified: false,
+      error: `Failed to connect to Canonical Renderer at ${url}: ${message}`,
+    };
+  }
+}
+
+/**
+ * Legacy verify function - routes to static or loop based on snapshot
+ * @deprecated Use verifyCertifiedStatic or verifyCertifiedLoop directly
+ */
+export async function verifyCertified(
+  snapshot: CanonicalSnapshot,
+  expectedHash: string,
+  expectedAnimationHash?: string
+): Promise<CanonicalVerifyResponse> {
+  const isLoop = snapshot.execution?.loop === true;
+  
+  if (isLoop && expectedAnimationHash) {
+    return verifyCertifiedLoop(snapshot, expectedHash, expectedAnimationHash);
+  }
+  
+  return verifyCertifiedStatic(snapshot, expectedHash);
 }
 
 // ============================================================
@@ -343,14 +405,8 @@ export function legacyToCodeModeSnapshot(
 }
 
 /**
- * Verify from artifact bundle JSON
- * Extracts snapshot and hash from bundle and calls verify endpoint
+ * Check if a snapshot is configured for loop mode
  */
-export async function verifyBundleViaCanonical(
-  bundle: {
-    snapshot: CanonicalSnapshot;
-    verification: { imageHash: string };
-  }
-): Promise<CanonicalVerifyResponse> {
-  return verifyCertified(bundle.snapshot, bundle.verification.imageHash);
+export function isLoopMode(snapshot: CanonicalSnapshot): boolean {
+  return snapshot.execution?.loop === true;
 }
