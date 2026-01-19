@@ -5,6 +5,8 @@ import { BacktestExecutor } from "@/components/BacktestExecutor";
 import { ArtifactsList } from "@/components/ArtifactsList";
 import { CertifiedArtifact } from "@/components/CertifiedArtifact";
 import { VerifyPanel } from "@/components/VerifyPanel";
+import { DatasetsPage } from "@/components/DatasetsPage";
+import { SettingsPage } from "@/components/SettingsPage";
 import { DraftResultBanner } from "@/components/DraftResultBanner";
 import { MetricCard } from "@/components/MetricCard";
 import { EquityChart } from "@/components/EquityChart";
@@ -286,20 +288,10 @@ export default function Index() {
         return <VerifyPanel />;
       
       case 'datasets':
-        return (
-          <div className="text-muted-foreground">
-            <h2 className="text-xl font-semibold text-foreground mb-4">Datasets</h2>
-            <p className="text-sm">Dataset management coming soon.</p>
-          </div>
-        );
+        return <DatasetsPage />;
       
       case 'settings':
-        return (
-          <div className="text-muted-foreground">
-            <h2 className="text-xl font-semibold text-foreground mb-4">Settings</h2>
-            <p className="text-sm">Configuration options coming soon.</p>
-          </div>
-        );
+        return <SettingsPage />;
       
       default:
         return null;
