@@ -7,7 +7,7 @@ import {
   Database
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import recanonLogo from "@/assets/recanon-logo.png";
+import recanonIcon from "@/assets/recanon-icon.png";
 
 interface SidebarProps {
   activeView: string;
@@ -32,7 +32,11 @@ export function Sidebar({ activeView, onViewChange }: SidebarProps) {
       {/* Logo */}
       <div className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
-          <img src={recanonLogo} alt="Recanon" className="h-8 w-auto" />
+          <img src={recanonIcon} alt="Recanon" className="h-8 w-8" />
+          <div>
+            <div className="font-semibold text-sm">Recanon</div>
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Certified Backtests</div>
+          </div>
         </div>
       </div>
 
