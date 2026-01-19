@@ -12,12 +12,13 @@ interface ProofGeneratorsProps {
 }
 
 // Deterministic static Code Mode program - simple geometric shapes
+// NOTE: Canvas is provided by Canonical Renderer (1950x2400) - do NOT call createCanvas()
 const STATIC_PROOF_CODE = `
 // Deterministic Static Proof Program
-// Renders a simple pattern of geometric shapes
+// Canvas: 1950x2400 (provided by runtime)
 
 function setup() {
-  createCanvas(800, 600);
+  // Canvas is provided by the Canonical Renderer
   noLoop();
 }
 
@@ -35,7 +36,7 @@ function draw() {
     for (let j = 0; j < rows; j++) {
       const x = i * cellW + cellW / 2;
       const y = j * cellH + cellH / 2;
-      const size = map(VAR[0], 0, 100, 10, 40);
+      const size = map(VAR[0], 0, 100, 20, 80);
       const hue = map(VAR[1], 0, 100, 120, 200);
       
       fill(hue, 180, 200);
@@ -58,19 +59,20 @@ function draw() {
   
   // Add text with seed info
   fill(255);
-  textSize(12);
+  textSize(24);
   textFont('monospace');
-  text('SEED: ' + SEED, 10, height - 10);
+  text('SEED: ' + SEED, 20, height - 20);
 }
 `;
 
 // Deterministic loop Code Mode program - animated shapes
+// NOTE: Canvas is provided by Canonical Renderer (1950x2400) - do NOT call createCanvas()
 const LOOP_PROOF_CODE = `
 // Deterministic Loop Proof Program
-// Renders an animated pattern over 60 frames
+// Canvas: 1950x2400 (provided by runtime)
 
 function setup() {
-  createCanvas(800, 600);
+  // Canvas is provided by the Canonical Renderer
   frameRate(30);
 }
 
@@ -89,8 +91,8 @@ function draw() {
       const x = i * cellW + cellW / 2;
       const y = j * cellH + cellH / 2;
       
-      const baseSize = map(VAR[0], 0, 100, 20, 60);
-      const animOffset = sin(t * TWO_PI + i * 0.5 + j * 0.3) * 10;
+      const baseSize = map(VAR[0], 0, 100, 40, 120);
+      const animOffset = sin(t * TWO_PI + i * 0.5 + j * 0.3) * 20;
       const size = baseSize + animOffset;
       
       const hue = map(VAR[1], 0, 100, 100, 220);
@@ -115,9 +117,9 @@ function draw() {
   
   // Frame counter
   fill(255);
-  textSize(12);
+  textSize(24);
   textFont('monospace');
-  text('FRAME: ' + frameCount + '/60  SEED: ' + SEED, 10, height - 10);
+  text('FRAME: ' + frameCount + '/60  SEED: ' + SEED, 20, height - 20);
   
   if (frameCount >= 60) {
     noLoop();

@@ -133,12 +133,16 @@ Write a Code Mode program that renders domain-specific visualizations:
 
 ```typescript
 const SCIENCE_VIZ_CODE = `
+// Canvas is provided by Canonical Renderer (1950x2400)
+// Do NOT call createCanvas()
 function setup() {
-  createCanvas(800, 600);
+  noLoop(); // or frameRate(30) for animations
 }
 
 function draw() {
+  background(20, 24, 30);
   // Visualize experiment based on VAR[0-9]
+  // Use width and height variables for responsive layout
 }
 `;
 ```

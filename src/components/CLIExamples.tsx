@@ -52,46 +52,38 @@ export function CLIExamples() {
   const renderStaticCurl = `curl -X POST ${canonicalUrl}/render \\
   -H "Content-Type: application/json" \\
   -d '{
-    "snapshot": {
-      "code": "function setup() { createCanvas(800,600); noLoop(); } function draw() { background(20); fill(100,200,150); ellipse(400,300,200,200); }",
-      "seed": 42,
-      "vars": [50,55,30,20,10,15,5,25,40,60],
-      "execution": { "frames": 1, "loop": false }
-    }
+    "code": "function setup() { noLoop(); } function draw() { background(20); fill(100,200,150); ellipse(width/2,height/2,200,200); }",
+    "seed": 42,
+    "vars": [50,55,30,20,10,15,5,25,40,60],
+    "execution": { "frames": 1, "loop": false }
   }'`;
 
   const verifyStaticCurl = `curl -X POST ${canonicalUrl}/verify \\
   -H "Content-Type: application/json" \\
   -d '{
-    "snapshot": {
-      "code": "function setup() { createCanvas(800,600); noLoop(); } function draw() { background(20); fill(100,200,150); ellipse(400,300,200,200); }",
-      "seed": 42,
-      "vars": [50,55,30,20,10,15,5,25,40,60],
-      "execution": { "frames": 1, "loop": false }
-    },
+    "code": "function setup() { noLoop(); } function draw() { background(20); fill(100,200,150); ellipse(width/2,height/2,200,200); }",
+    "seed": 42,
+    "vars": [50,55,30,20,10,15,5,25,40,60],
+    "execution": { "frames": 1, "loop": false },
     "expectedHash": "sha256:YOUR_IMAGE_HASH_HERE"
   }'`;
 
   const renderLoopCurl = `curl -X POST ${canonicalUrl}/render \\
   -H "Content-Type: application/json" \\
   -d '{
-    "snapshot": {
-      "code": "function setup() { createCanvas(800,600); } function draw() { background(20); fill(100,200,150); ellipse(400+sin(frameCount*0.1)*100,300,100,100); if(frameCount>=60) noLoop(); }",
-      "seed": 42,
-      "vars": [50,55,30,20,10,15,5,25,40,60],
-      "execution": { "frames": 60, "loop": true }
-    }
+    "code": "function setup() { frameRate(30); } function draw() { background(20); fill(100,200,150); ellipse(width/2+sin(frameCount*0.1)*100,height/2,100,100); if(frameCount>=60) noLoop(); }",
+    "seed": 42,
+    "vars": [50,55,30,20,10,15,5,25,40,60],
+    "execution": { "frames": 60, "loop": true }
   }'`;
 
   const verifyLoopCurl = `curl -X POST ${canonicalUrl}/verify \\
   -H "Content-Type: application/json" \\
   -d '{
-    "snapshot": {
-      "code": "function setup() { createCanvas(800,600); } function draw() { background(20); fill(100,200,150); ellipse(400+sin(frameCount*0.1)*100,300,100,100); if(frameCount>=60) noLoop(); }",
-      "seed": 42,
-      "vars": [50,55,30,20,10,15,5,25,40,60],
-      "execution": { "frames": 60, "loop": true }
-    },
+    "code": "function setup() { frameRate(30); } function draw() { background(20); fill(100,200,150); ellipse(width/2+sin(frameCount*0.1)*100,height/2,100,100); if(frameCount>=60) noLoop(); }",
+    "seed": 42,
+    "vars": [50,55,30,20,10,15,5,25,40,60],
+    "execution": { "frames": 60, "loop": true },
     "expectedPosterHash": "sha256:YOUR_POSTER_HASH",
     "expectedAnimationHash": "sha256:YOUR_ANIMATION_HASH"
   }'`;

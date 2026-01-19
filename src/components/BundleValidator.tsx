@@ -17,14 +17,16 @@ interface BundleValidatorProps {
 }
 
 // Example static bundle that works without network (for instant loading)
+// NOTE: Canvas is provided by Canonical Renderer - do NOT call createCanvas()
 export const EXAMPLE_STATIC_BUNDLE = {
   runtime: "nexart-canonical-renderer",
   artifactId: "example-static-001",
   snapshot: {
     code: `
 // Deterministic Static Proof Program
+// Canvas: 1950x2400 (provided by runtime)
 function setup() {
-  createCanvas(800, 600);
+  // Canvas is provided by the Canonical Renderer
   noLoop();
 }
 
@@ -41,7 +43,7 @@ function draw() {
     for (let j = 0; j < rows; j++) {
       const x = i * cellW + cellW / 2;
       const y = j * cellH + cellH / 2;
-      const size = map(VAR[0], 0, 100, 10, 40);
+      const size = map(VAR[0], 0, 100, 20, 80);
       const hue = map(VAR[1], 0, 100, 120, 200);
       
       fill(hue, 180, 200);
@@ -60,7 +62,7 @@ function draw() {
   },
   expectedImageHash: "example_hash_must_be_replaced",
   verificationRequirements: "static-single-hash",
-  _note: "Example bundle - generate a real one using 'Generate Verified' buttons above"
+  _note: "Example bundle - create a real result using 'Create Result' buttons above"
 };
 
 export function validateBundle(bundleJson: string): ValidationResult {

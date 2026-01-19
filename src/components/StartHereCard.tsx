@@ -384,6 +384,30 @@ export function StartHereCard({ onBundleGenerated }: StartHereCardProps) {
           <span>Rendering via Canonical Renderer...</span>
         </div>
       )}
+
+      {/* Reset Button */}
+      <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">
+          Having issues? Reset to clear cached bundles and start fresh.
+        </p>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            // Clear any localStorage cached examples
+            localStorage.removeItem('recanon_last_bundle');
+            localStorage.removeItem('recanon_cached_snapshot');
+            setLastBundle(null);
+            toast({
+              title: "Reset complete",
+              description: "Cached bundles cleared. Built-in templates restored.",
+            });
+          }}
+        >
+          <Zap className="w-3.5 h-3.5 mr-1.5" />
+          Reset Examples
+        </Button>
+      </div>
     </div>
   );
 }
