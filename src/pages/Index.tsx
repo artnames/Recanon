@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { StrategiesPanel } from "@/components/StrategiesPanel";
 import { BacktestExecutor } from "@/components/BacktestExecutor";
@@ -12,7 +12,10 @@ import { EquityChart } from "@/components/EquityChart";
 import { DrawdownChart } from "@/components/DrawdownChart";
 import { mockStrategies, mockArtifacts } from "@/data/mockData";
 import { 
-  runCertifiedBacktest, 
+  runCertifiedBacktest,
+  runDraftBacktest,
+  isNexArtAvailable,
+  getNexArtInfo,
   type ExecutionMode, 
   type CertifiedExecutionResult 
 } from "@/certified/engine";
@@ -20,6 +23,7 @@ import { createArtifactBundle } from "@/certified/bundleExport";
 import type { ArtifactBundle } from "@/types/artifactBundle";
 import { registerArtifact } from "@/api/artifacts";
 import type { BacktestConfig, ExecutionStep, CertifiedArtifact as ArtifactType } from "@/types/backtest";
+import { AlertTriangle, XCircle } from "lucide-react";
 
 const DATASET_HASHES: Record<string, string> = {
   'sp500-2020-2024': 'sha256:a7c9e3f2d8b4a1e6c5f9d2b8a3e7f4c1d9b5a2e8f6c3d7b1a4e9f5c2d8b3a6e7',
@@ -36,12 +40,10 @@ export default function Index() {
   // Execution results
   const [lastExecutionMode, setLastExecutionMode] = useState<ExecutionMode | null>(null);
   const [certifiedResult, setCertifiedResult] = useState<CertifiedExecutionResult | null>(null);
-  const [draftResult, setDraftResult] = useState<{
-    metrics: ArtifactType['metrics'];
-    equityCurve: ArtifactType['equityCurve'];
-  } | null>(null);
+  const [draftResult, setDraftResult] = useState<CertifiedExecutionResult | null>(null);
   const [currentBundle, setCurrentBundle] = useState<ArtifactBundle | null>(null);
   const [lastConfig, setLastConfig] = useState<BacktestConfig | null>(null);
+  const [executionError, setExecutionError] = useState<string | null>(null);
 
   const handleExecute = useCallback(async (config: BacktestConfig, mode: ExecutionMode) => {
     setIsExecuting(true);
@@ -50,6 +52,7 @@ export default function Index() {
     setDraftResult(null);
     setCurrentBundle(null);
     setLastConfig(config);
+    setExecutionError(null);
     
     const strategy = mockStrategies.find(s => s.id === config.strategyId);
     if (!strategy) return;
@@ -59,16 +62,16 @@ export default function Index() {
           { id: '1', label: 'Validating Manifest', status: 'active' },
           { id: '2', label: 'Loading Strategy', status: 'pending' },
           { id: '3', label: 'Loading Dataset', status: 'pending' },
-          { id: '4', label: 'Initializing NexArt Engine', status: 'pending' },
-          { id: '5', label: 'Executing Deterministic Backtest', status: 'pending' },
-          { id: '6', label: 'Computing Metrics', status: 'pending' },
+          { id: '4', label: 'Initializing NexArt SDK', status: 'pending' },
+          { id: '5', label: 'Executing via NexArt Engine', status: 'pending' },
+          { id: '6', label: 'Computing Deterministic Metrics', status: 'pending' },
           { id: '7', label: 'Generating Verification Hash', status: 'pending' },
           { id: '8', label: 'Sealing Artifact', status: 'pending' },
         ]
       : [
           { id: '1', label: 'Loading Strategy', status: 'active' },
           { id: '2', label: 'Loading Dataset', status: 'pending' },
-          { id: '3', label: 'Executing Backtest', status: 'pending' },
+          { id: '3', label: 'Executing Backtest (Mock)', status: 'pending' },
           { id: '4', label: 'Computing Metrics', status: 'pending' },
         ];
     
@@ -95,19 +98,26 @@ export default function Index() {
       }));
     }
 
+    const executionParams = {
+      strategyId: config.strategyId,
+      strategyHash: strategy.codeHash,
+      datasetId: config.dataset,
+      datasetHash: DATASET_HASHES[config.dataset] || DATASET_HASHES['sp500-2020-2024'],
+      startDate: config.startDate,
+      endDate: config.endDate,
+      seed: config.seed,
+      parameters: config.parameters
+    };
+
     if (mode === 'certified') {
-      // Use the certified engine
+      // CERTIFIED MODE - Must use NexArt SDK, no fallback
       try {
-        const result = await runCertifiedBacktest({
-          strategyId: config.strategyId,
-          strategyHash: strategy.codeHash,
-          datasetId: config.dataset,
-          datasetHash: DATASET_HASHES[config.dataset] || DATASET_HASHES['sp500-2020-2024'],
-          startDate: config.startDate,
-          endDate: config.endDate,
-          seed: config.seed,
-          parameters: config.parameters
-        });
+        // Check SDK availability first
+        if (!isNexArtAvailable()) {
+          throw new Error('NexArt SDK is not available. Certified execution cannot proceed.');
+        }
+
+        const result = await runCertifiedBacktest(executionParams);
         setCertifiedResult(result);
         
         // Create and register bundle for API access
@@ -120,24 +130,36 @@ export default function Index() {
         });
         setCurrentBundle(bundle);
         registerArtifact(bundle);
+
+        // Log NexArt metadata for verification
+        if (result.nexartMetadata) {
+          console.log('[NexArt] Certified execution completed:', {
+            protocol: result.nexartMetadata.protocol,
+            protocolVersion: result.nexartMetadata.protocolVersion,
+            sdkVersion: result.nexartMetadata.sdkVersion,
+            deterministic: result.nexartMetadata.deterministic,
+          });
+        }
       } catch (error) {
-        console.error('Certified execution failed:', error);
+        // NO FALLBACK - show error state
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error('Certified execution failed:', errorMessage);
+        setExecutionError(errorMessage);
+        setExecutionSteps(prev => prev.map(step => ({
+          ...step,
+          status: step.status === 'completed' ? 'completed' : 'pending'
+        })));
       }
     } else {
-      // Draft mode - simple mock result
-      setDraftResult({
-        metrics: {
-          totalReturn: Math.random() * 60 - 10,
-          annualizedReturn: Math.random() * 20,
-          sharpeRatio: 0.5 + Math.random() * 1.5,
-          maxDrawdown: -(5 + Math.random() * 20),
-          winRate: 45 + Math.random() * 15,
-          profitFactor: 1 + Math.random(),
-          totalTrades: Math.floor(100 + Math.random() * 200),
-          averageTradeReturn: (Math.random() - 0.3) * 0.5
-        },
-        equityCurve: generateMockEquityCurve(config.startDate, config.endDate)
-      });
+      // DRAFT MODE - Uses mock runtime, NOT verifiable
+      try {
+        const result = await runDraftBacktest(executionParams);
+        setDraftResult(result);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error('Draft execution failed:', errorMessage);
+        setExecutionError(errorMessage);
+      }
     }
 
     setIsExecuting(false);
@@ -158,8 +180,24 @@ export default function Index() {
               executionSteps={executionSteps}
             />
 
+            {/* Error State */}
+            {executionError && !isExecuting && (
+              <div className="p-4 rounded-md border border-destructive bg-destructive/10">
+                <div className="flex items-start gap-3">
+                  <XCircle className="h-5 w-5 text-destructive mt-0.5" />
+                  <div>
+                    <h3 className="font-semibold text-destructive">Certified Execution Failed</h3>
+                    <p className="text-sm text-destructive/80 mt-1">{executionError}</p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      No fallback to mock runtime. Certified mode requires NexArt SDK.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Results Section */}
-            {(certifiedResult || draftResult) && !isExecuting && (
+            {(certifiedResult || draftResult) && !isExecuting && !executionError && (
               <div className="pt-6 border-t border-border space-y-6">
                 <h2 className="text-xl font-semibold">Execution Results</h2>
                 
