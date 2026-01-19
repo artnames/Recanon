@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Search, ShieldCheck, AlertTriangle, CheckCircle2, Loader2, Upload, Info, BookOpen } from "lucide-react";
+import { Search, ShieldCheck, AlertTriangle, CheckCircle2, Loader2, Upload, Info, BookOpen, Zap } from "lucide-react";
 import { Button } from "./ui/button";
 import { HashDisplay } from "./HashDisplay";
 import { CanonicalRendererStatus } from "./CanonicalHealthBadge";
 import { QuickGuide } from "./QuickGuide";
 import { ProofGenerators } from "./ProofGenerators";
 import { CLIExamples } from "./CLIExamples";
+import { LiveVerifier } from "./LiveVerifier";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { 
   verifyCertifiedStatic,
@@ -199,13 +200,21 @@ export function VerifyPanel() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="live" className="flex items-center gap-2">
+            <Zap className="w-3.5 h-3.5" />
+            Live Verifier
+          </TabsTrigger>
           <TabsTrigger value="verify">Verify Bundle</TabsTrigger>
           <TabsTrigger value="guide" className="flex items-center gap-2">
             <BookOpen className="w-3.5 h-3.5" />
             Quick Guide
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="live" className="mt-6">
+          <LiveVerifier />
+        </TabsContent>
 
         <TabsContent value="guide" className="mt-6">
           <QuickGuide />
