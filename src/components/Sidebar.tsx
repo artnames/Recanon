@@ -4,7 +4,8 @@ import {
   ShieldCheck, 
   RotateCcw, 
   Settings,
-  Database
+  Database,
+  BookOpen
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import recanonIcon from "@/assets/recanon-icon.png";
@@ -18,6 +19,7 @@ const navItems = [
   { id: 'strategies', label: 'Strategies', icon: FileCode },
   { id: 'execute', label: 'Execute', icon: Play },
   { id: 'artifacts', label: 'Artifacts', icon: ShieldCheck },
+  { id: 'guide', label: 'How It Works', icon: BookOpen },
   { id: 'verify', label: 'Verify & Test', icon: RotateCcw },
 ];
 
