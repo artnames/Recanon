@@ -134,22 +134,22 @@ export async function verifyArtifact(
     return {
       mode: 'loop',
       verified: result.verified,
-      posterVerified: result.data?.posterVerified,
-      expectedPosterHash: result.data?.expectedPosterHash ?? bundle.expectedImageHash,
-      computedPosterHash: result.data?.computedPosterHash,
-      animationVerified: result.data?.animationVerified,
-      expectedAnimationHash: result.data?.expectedAnimationHash ?? bundle.expectedAnimationHash,
-      computedAnimationHash: result.data?.computedAnimationHash,
-      hashMatchType: result.data?.hashMatchType,
-      matchDetails: result.data?.matchDetails ?? {
-        codeMatch: false,
-        seedMatch: false,
-        varsMatch: false,
-        outputMatch: false,
+      posterVerified: result.posterVerified,
+      expectedPosterHash: result.expectedPosterHash ?? bundle.expectedImageHash,
+      computedPosterHash: result.computedPosterHash,
+      animationVerified: result.animationVerified,
+      expectedAnimationHash: result.expectedAnimationHash ?? bundle.expectedAnimationHash,
+      computedAnimationHash: result.computedAnimationHash,
+      hashMatchType: result.hashMatchType,
+      matchDetails: {
+        codeMatch: result.verified,
+        seedMatch: result.verified,
+        varsMatch: result.verified,
+        outputMatch: result.verified,
       },
-      rendererVersion: result.data?.rendererVersion ?? 'N/A',
-      nodeVersion: result.data?.nodeVersion ?? 'N/A',
-      timestamp: result.data?.timestamp ?? new Date().toISOString(),
+      rendererVersion: result.metadata?.rendererVersion ?? 'N/A',
+      nodeVersion: result.metadata?.nodeVersion ?? 'N/A',
+      timestamp: result.metadata?.timestamp ?? new Date().toISOString(),
     };
   } else {
     // Static mode: use single hash
@@ -176,17 +176,17 @@ export async function verifyArtifact(
     return {
       mode: 'static',
       verified: result.verified,
-      originalHash: result.data?.originalHash ?? bundle.expectedImageHash,
-      computedHash: result.data?.computedHash,
-      matchDetails: result.data?.matchDetails ?? {
-        codeMatch: false,
-        seedMatch: false,
-        varsMatch: false,
-        outputMatch: false,
+      originalHash: result.expectedHash ?? bundle.expectedImageHash,
+      computedHash: result.computedHash,
+      matchDetails: {
+        codeMatch: result.verified,
+        seedMatch: result.verified,
+        varsMatch: result.verified,
+        outputMatch: result.verified,
       },
-      rendererVersion: result.data?.rendererVersion ?? 'N/A',
-      nodeVersion: result.data?.nodeVersion ?? 'N/A',
-      timestamp: result.data?.timestamp ?? new Date().toISOString(),
+      rendererVersion: result.metadata?.rendererVersion ?? 'N/A',
+      nodeVersion: result.metadata?.nodeVersion ?? 'N/A',
+      timestamp: result.metadata?.timestamp ?? new Date().toISOString(),
     };
   }
 }

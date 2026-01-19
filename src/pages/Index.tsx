@@ -126,9 +126,11 @@ export default function Index() {
         imageHash: certifiedResult.imageHash,
         animationHash: certifiedResult.animationHash,
         outputBase64: certifiedResult.outputBase64,
+        animationBase64: certifiedResult.animationBase64,
         mimeType: certifiedResult.mimeType,
-        nodeMetadata: certifiedResult.canonicalMetadata,
-        metrics: certifiedResult.metrics,
+        nodeMetadata: {
+          ...certifiedResult.canonicalMetadata,
+        },
         sealed: true,
         createdAt: certifiedResult.canonicalMetadata.timestamp,
       },
@@ -231,20 +233,15 @@ export default function Index() {
                   </p>
                 </div>
 
-                {/* Metrics */}
-                {certifiedResult.metrics && (
-                  <div>
-                    <h3 className="section-header">Computed Metrics</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      <MetricCard label="Total Return" value={`${certifiedResult.metrics.totalReturn >= 0 ? '+' : ''}${(certifiedResult.metrics.totalReturn * 100).toFixed(2)}`} suffix="%" trend={certifiedResult.metrics.totalReturn >= 0 ? 'up' : 'down'} />
-                      <MetricCard label="CAGR" value={`${(certifiedResult.metrics.cagr * 100).toFixed(2)}`} suffix="%" />
-                      <MetricCard label="Max Drawdown" value={(certifiedResult.metrics.maxDrawdown * 100).toFixed(2)} suffix="%" trend="down" />
-                      <MetricCard label="Volatility" value={(certifiedResult.metrics.volatility * 100).toFixed(2)} suffix="%" />
-                      <MetricCard label="Sharpe (est)" value={certifiedResult.metrics.sharpeEstimate.toFixed(2)} />
-                      <MetricCard label="Final Equity" value={`$${certifiedResult.metrics.finalEquity.toLocaleString()}`} />
-                    </div>
+                {/* Sealed Result - No computed metrics since renderer doesn't provide them */}
+                <div>
+                  <h3 className="section-header">Execution Details</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <MetricCard label="Mode" value={certifiedResult.mode === 'loop' ? 'Loop' : 'Static'} />
+                    <MetricCard label="Seed" value={certifiedResult.snapshot.seed.toString()} />
+                    <MetricCard label="Vars Count" value={certifiedResult.snapshot.vars?.length?.toString() ?? '0'} />
                   </div>
-                )}
+                </div>
 
                 {/* Node Metadata */}
                 <div className="p-4 rounded-md border border-border bg-card">

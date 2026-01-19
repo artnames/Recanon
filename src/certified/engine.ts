@@ -19,6 +19,8 @@ import {
   type CanonicalSnapshot,
   type CanonicalRenderResponse,
   type CanonicalVerifyResponse,
+  type NormalizedRenderResult,
+  type CanonicalMetadata,
 } from './canonicalClient';
 import { DEFAULT_VARS, type CodeModeVars } from './codeModeProgram';
 import { validateNoCreateCanvas } from './codeValidator';
@@ -31,6 +33,8 @@ export {
   type CanonicalSnapshot,
   type CanonicalRenderResponse,
   type CanonicalVerifyResponse,
+  type NormalizedRenderResult,
+  type CanonicalMetadata,
 };
 
 export interface StrategyManifest {
@@ -66,30 +70,17 @@ export interface CertifiedExecutionParams {
 export interface CertifiedExecutionResult {
   artifactId: string;
   snapshot: CanonicalSnapshot;
+  mode: 'static' | 'loop';
   imageHash: string;
   animationHash?: string;
   outputBase64: string;
+  animationBase64?: string;
   mimeType: 'image/png' | 'video/mp4';
   sealed: boolean;
   replayCommand: string;
-  metrics?: {
-    totalReturn: number;
-    cagr: number;
-    maxDrawdown: number;
-    volatility: number;
-    finalEquity: number;
-    sharpeEstimate: number;
-  };
   // Canonical Renderer metadata
-  canonicalMetadata: {
-    protocol: string;
-    protocolVersion: string;
-    sdkVersion: string;
-    nodeVersion: string;
-    rendererVersion: string;
+  canonicalMetadata: CanonicalMetadata & {
     rendererUrl: string;
-    timestamp: string;
-    deterministic: boolean;
   };
 }
 
@@ -192,30 +183,30 @@ export async function runCertifiedBacktest(
 
   if (!renderResult.success || !renderResult.data) {
     throw new Error(
-      `Certified execution failed (Canonical Renderer error): ${renderResult.error || 'Unknown error'}`
+      `Sealed execution blocked (Canonical Renderer error): ${renderResult.error || 'Unknown error'}`
     );
   }
 
-  // Step 4: Return certified result with canonical metadata
+  const data = renderResult.data;
+
+  // Step 5: Return certified result with canonical metadata
+  // Generate unique artifact ID from hash prefix + timestamp
+  const artifactId = `SEALED-${data.imageHash.slice(0, 8).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+  
   return {
-    artifactId: renderResult.data.artifactId,
+    artifactId,
     snapshot,
-    imageHash: renderResult.data.imageHash,
-    animationHash: renderResult.data.animationHash,
-    outputBase64: renderResult.data.outputBase64,
-    mimeType: renderResult.data.mimeType,
+    mode: data.mode,
+    imageHash: data.imageHash,
+    animationHash: data.animationHash,
+    outputBase64: data.outputBase64,
+    animationBase64: data.animationBase64,
+    mimeType: data.mode === 'loop' ? 'video/mp4' : 'image/png',
     sealed: true,
-    replayCommand: `curl -X POST ${getCanonicalUrl()}/verify -H "Content-Type: application/json" -d '{"snapshot": ${JSON.stringify(snapshot)}, "expectedHash": "${renderResult.data.imageHash}"}'`,
-    metrics: renderResult.data.computedMetrics,
+    replayCommand: `curl -X POST ${getCanonicalUrl()}/verify -H "Content-Type: application/json" -d '{"snapshot": ${JSON.stringify(snapshot)}, "expectedHash": "${data.imageHash}"}'`,
     canonicalMetadata: {
-      protocol: renderResult.data.metadata.protocol,
-      protocolVersion: renderResult.data.metadata.protocolVersion,
-      sdkVersion: renderResult.data.metadata.sdkVersion,
-      nodeVersion: renderResult.data.metadata.nodeVersion,
-      rendererVersion: renderResult.data.metadata.rendererVersion,
+      ...data.metadata,
       rendererUrl: getCanonicalUrl(),
-      timestamp: renderResult.data.metadata.timestamp,
-      deterministic: renderResult.data.metadata.deterministic,
     },
   };
 }
@@ -300,22 +291,23 @@ export async function runDraftBacktest(
 export async function verifyCertifiedResult(
   snapshot: CanonicalSnapshot,
   expectedHash: string
-): Promise<{ verified: boolean; message: string; details?: CanonicalVerifyResponse['data'] }> {
+): Promise<{ verified: boolean; message: string; response?: CanonicalVerifyResponse }> {
   const verifyResult = await verifyCertified(snapshot, expectedHash);
 
   if (verifyResult.error) {
     return {
       verified: false,
-      message: `Verification failed: ${verifyResult.error}`,
+      message: `Check failed: ${verifyResult.error}`,
+      response: verifyResult,
     };
   }
 
   return {
     verified: verifyResult.verified,
     message: verifyResult.verified
-      ? 'Verification passed. Execution is authentic and reproducible.'
-      : 'Verification failed. Hash mismatch detected.',
-    details: verifyResult.data,
+      ? 'Check passed. Execution is authentic and reproducible.'
+      : 'Check failed. Hash mismatch detected.',
+    response: verifyResult,
   };
 }
 

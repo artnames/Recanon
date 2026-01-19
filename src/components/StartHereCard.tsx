@@ -152,22 +152,25 @@ export function StartHereCard({ onBundleGenerated }: StartHereCardProps) {
         throw new Error(result.error || 'Render failed');
       }
 
+      const data = result.data;
+      const artifactId = `SEALED-${data.imageHash.slice(0, 8).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+
       const bundle = {
         runtime: 'nexart-canonical-renderer',
-        artifactId: result.data.artifactId,
+        artifactId,
         snapshot,
-        expectedImageHash: result.data.imageHash,
+        expectedImageHash: data.imageHash,
         verificationRequirements: 'static-single-hash' as const,
         canonical: {
           url: getCanonicalUrl(),
-          rendererVersion: result.data.metadata.rendererVersion,
-          protocolVersion: result.data.metadata.protocolVersion,
+          rendererVersion: data.metadata.rendererVersion,
+          protocolVersion: data.metadata.protocolVersion,
         },
         output: {
-          mimeType: result.data.mimeType,
-          base64: result.data.outputBase64,
+          mimeType: data.mime,
+          base64: data.outputBase64,
         },
-        metadata: result.data.metadata,
+        metadata: data.metadata,
         createdAt: new Date().toISOString(),
       };
 
@@ -210,24 +213,27 @@ export function StartHereCard({ onBundleGenerated }: StartHereCardProps) {
         throw new Error(result.error || 'Render failed');
       }
 
+      const data = result.data;
+      const artifactId = `SEALED-${data.imageHash.slice(0, 8).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+
       const bundle = {
         runtime: 'nexart-canonical-renderer',
-        artifactId: result.data.artifactId,
+        artifactId,
         snapshot,
-        expectedImageHash: result.data.imageHash,
-        expectedAnimationHash: result.data.animationHash,
+        expectedImageHash: data.imageHash,
+        expectedAnimationHash: data.animationHash,
         verificationRequirements: 'loop-requires-both-hashes' as const,
         canonical: {
           url: getCanonicalUrl(),
-          rendererVersion: result.data.metadata.rendererVersion,
-          protocolVersion: result.data.metadata.protocolVersion,
+          rendererVersion: data.metadata.rendererVersion,
+          protocolVersion: data.metadata.protocolVersion,
         },
         output: {
-          mimeType: result.data.mimeType,
-          posterBase64: result.data.outputBase64,
-          animationBase64: result.data.animationBase64,
+          mimeType: data.mime,
+          posterBase64: data.outputBase64,
+          animationBase64: data.animationBase64,
         },
-        metadata: result.data.metadata,
+        metadata: data.metadata,
         createdAt: new Date().toISOString(),
       };
 

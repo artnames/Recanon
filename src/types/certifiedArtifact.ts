@@ -9,15 +9,17 @@ import type { CanonicalSnapshot } from '@/certified/canonicalClient';
 
 /**
  * Node metadata from the Canonical Renderer
+ * All fields are optional to match actual API responses
  */
 export interface CanonicalNodeMetadata {
-  protocol: string;
-  protocolVersion: string;
-  sdkVersion: string;
-  nodeVersion: string;
-  rendererVersion: string;
-  timestamp: string;
-  deterministic: boolean;
+  protocol?: string;
+  protocolVersion?: string;
+  sdkVersion?: string;
+  nodeVersion?: string;
+  rendererVersion?: string;
+  rendererUrl?: string;
+  timestamp?: string;
+  deterministic?: boolean;
 }
 
 /**
