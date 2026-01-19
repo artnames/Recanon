@@ -1,4 +1,4 @@
-import { ShieldCheck, Play, Download, ExternalLink } from "lucide-react";
+import { ShieldCheck, Play } from "lucide-react";
 import type { CertifiedArtifact as ArtifactType } from "@/types/backtest";
 import { HashDisplay } from "./HashDisplay";
 import { VerifiedBadge } from "./VerifiedBadge";
@@ -6,13 +6,60 @@ import { MetricCard } from "./MetricCard";
 import { EquityChart } from "./EquityChart";
 import { DrawdownChart } from "./DrawdownChart";
 import { Button } from "./ui/button";
+import { ArtifactExportMenu } from "./ArtifactExportMenu";
+import type { ArtifactBundle } from "@/types/artifactBundle";
+import { ARTIFACT_BUNDLE_VERSION } from "@/types/artifactBundle";
 
 interface CertifiedArtifactProps {
   artifact: ArtifactType;
   onReplay?: () => void;
 }
 
+// Convert legacy artifact to bundle format for export
+function convertToBundle(artifact: ArtifactType): ArtifactBundle {
+  return {
+    artifactVersion: ARTIFACT_BUNDLE_VERSION,
+    artifactId: artifact.id,
+    createdAt: artifact.executedAt,
+    strategy: {
+      name: artifact.strategyId,
+      codeHash: artifact.strategyHash,
+    },
+    dataset: {
+      datasetId: 'dataset-001',
+      datasetHash: artifact.datasetHash,
+      source: 'Historical Market Data',
+    },
+    params: {
+      seed: artifact.executionSeed,
+      startDate: new Date(new Date(artifact.executedAt).getTime() - 365 * 24 * 60 * 60 * 1000 * 4).toISOString().split('T')[0],
+      endDate: artifact.executedAt.split('T')[0],
+      parameters: {},
+    },
+    manifest: {
+      seed: artifact.executionSeed,
+      datasetHash: artifact.datasetHash,
+      strategyHash: artifact.strategyHash,
+      parametersHash: artifact.parameterHash,
+      startDate: new Date(new Date(artifact.executedAt).getTime() - 365 * 24 * 60 * 60 * 1000 * 4).toISOString().split('T')[0],
+      endDate: artifact.executedAt.split('T')[0],
+      timestamp: artifact.executedAt,
+      manifestHash: artifact.parameterHash,
+    },
+    outputs: {
+      equityCurve: artifact.equityCurve,
+      metrics: artifact.metrics,
+    },
+    verification: {
+      outputHash: artifact.verificationHash,
+      verificationHash: artifact.verificationHash,
+    },
+  };
+}
+
 export function CertifiedArtifact({ artifact, onReplay }: CertifiedArtifactProps) {
+  const bundle = convertToBundle(artifact);
+
   return (
     <div className="space-y-6">
       {/* Seal Header */}
@@ -42,10 +89,7 @@ export function CertifiedArtifact({ artifact, onReplay }: CertifiedArtifactProps
               <Play className="w-3.5 h-3.5" />
               Replay
             </Button>
-            <Button variant="outline" size="sm">
-              <Download className="w-3.5 h-3.5" />
-              Export
-            </Button>
+            <ArtifactExportMenu bundle={bundle} variant="compact" />
           </div>
         </div>
         <div className="mt-4 pt-4 border-t border-verified/20 text-xs text-muted-foreground">

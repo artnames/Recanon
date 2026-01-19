@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { StrategiesPanel } from "@/components/StrategiesPanel";
 import { BacktestExecutor } from "@/components/BacktestExecutor";
@@ -16,6 +16,9 @@ import {
   type ExecutionMode, 
   type CertifiedExecutionResult 
 } from "@/certified/engine";
+import { createArtifactBundle } from "@/certified/bundleExport";
+import type { ArtifactBundle } from "@/types/artifactBundle";
+import { registerArtifact } from "@/api/artifacts";
 import type { BacktestConfig, ExecutionStep, CertifiedArtifact as ArtifactType } from "@/types/backtest";
 
 const DATASET_HASHES: Record<string, string> = {
@@ -37,12 +40,16 @@ export default function Index() {
     metrics: ArtifactType['metrics'];
     equityCurve: ArtifactType['equityCurve'];
   } | null>(null);
+  const [currentBundle, setCurrentBundle] = useState<ArtifactBundle | null>(null);
+  const [lastConfig, setLastConfig] = useState<BacktestConfig | null>(null);
 
   const handleExecute = useCallback(async (config: BacktestConfig, mode: ExecutionMode) => {
     setIsExecuting(true);
     setLastExecutionMode(mode);
     setCertifiedResult(null);
     setDraftResult(null);
+    setCurrentBundle(null);
+    setLastConfig(config);
     
     const strategy = mockStrategies.find(s => s.id === config.strategyId);
     if (!strategy) return;
@@ -102,6 +109,17 @@ export default function Index() {
           parameters: config.parameters
         });
         setCertifiedResult(result);
+        
+        // Create and register bundle for API access
+        const bundle = createArtifactBundle({
+          result,
+          strategy,
+          datasetId: config.dataset,
+          datasetSource: config.dataset.replace(/-/g, ' ').toUpperCase(),
+          parameters: config.parameters,
+        });
+        setCurrentBundle(bundle);
+        registerArtifact(bundle);
       } catch (error) {
         console.error('Certified execution failed:', error);
       }
@@ -187,7 +205,7 @@ export default function Index() {
 
                 {lastExecutionMode === 'certified' && certifiedResult && (
                   <>
-                    <CertifiedResultHeader result={certifiedResult} />
+                    <CertifiedResultHeader result={certifiedResult} bundle={currentBundle} />
                     
                     {/* Certified Metrics */}
                     <div>

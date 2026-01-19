@@ -1,12 +1,15 @@
 import { ShieldCheck, Lock } from "lucide-react";
 import { HashDisplay } from "./HashDisplay";
+import { ArtifactExportMenu } from "./ArtifactExportMenu";
 import type { CertifiedExecutionResult } from "@/certified/engine";
+import type { ArtifactBundle } from "@/types/artifactBundle";
 
 interface CertifiedResultHeaderProps {
   result: CertifiedExecutionResult;
+  bundle?: ArtifactBundle | null;
 }
 
-export function CertifiedResultHeader({ result }: CertifiedResultHeaderProps) {
+export function CertifiedResultHeader({ result, bundle }: CertifiedResultHeaderProps) {
   return (
     <div className="p-4 rounded-md bg-verified/5 border-2 border-verified/30">
       <div className="flex items-start justify-between">
@@ -27,6 +30,9 @@ export function CertifiedResultHeader({ result }: CertifiedResultHeaderProps) {
             </div>
           </div>
         </div>
+        
+        {/* Export Menu */}
+        <ArtifactExportMenu bundle={bundle ?? null} variant="compact" />
       </div>
 
       <div className="mt-4 pt-4 border-t border-verified/20 space-y-2">
@@ -59,7 +65,7 @@ export function CertifiedResultHeader({ result }: CertifiedResultHeaderProps) {
         <div className="mt-3 pt-3 border-t border-verified/10">
           <span className="text-xs text-muted-foreground">Replay Command</span>
           <code className="block font-mono text-xs text-hash bg-background/50 p-2 rounded mt-1">
-            {result.replayCommand}
+            {bundle ? `node scripts/replay-artifact.ts --bundle ./${result.artifactId}-bundle.json` : result.replayCommand}
           </code>
         </div>
       </div>
