@@ -115,6 +115,28 @@ export function QuickGuide() {
         </ul>
       </div>
 
+      {/* Protocol Rules */}
+      <div className="p-4 rounded-md border border-warning/30 bg-warning/5">
+        <h3 className="section-header flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-warning" />
+          Protocol Rules
+        </h3>
+        <ul className="space-y-2 text-sm text-muted-foreground">
+          <li className="flex items-start gap-2">
+            <span className="text-warning font-bold">•</span>
+            <span><strong className="text-foreground">createCanvas() is forbidden</strong> — The Canonical Renderer provides the canvas (1950×2400). Your code must not call <code className="font-mono text-xs bg-muted px-1 rounded">createCanvas()</code>.</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-warning font-bold">•</span>
+            <span><strong className="text-foreground">Use width/height from runtime</strong> — Reference the global <code className="font-mono text-xs bg-muted px-1 rounded">width</code> and <code className="font-mono text-xs bg-muted px-1 rounded">height</code> variables instead of hardcoding dimensions.</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-warning font-bold">•</span>
+            <span><strong className="text-foreground">Deterministic only</strong> — No Date.now(), Math.random(), or external fetches. Use SEED for randomness.</span>
+          </li>
+        </ul>
+      </div>
+
       {/* Static vs Loop Hash Rules */}
       <div className="p-4 rounded-md border border-border bg-card">
         <h3 className="section-header flex items-center gap-2">

@@ -89,9 +89,11 @@ export function generateBacktestCodeModeProgram(): string {
 // NexArt Code Mode - Backtest Visualization
 // Protocol: nexart v1.2.0
 // Deterministic execution guaranteed by seed
+// Canvas: 1950x2400 (provided by runtime - do NOT call createCanvas)
 
 function setup() {
-  createCanvas(1200, 800);
+  // Canvas is provided by the Canonical Renderer (1950x2400)
+  // Do NOT call createCanvas() - it will cause execution to fail
   background(15, 15, 20);
   noLoop();
 }
