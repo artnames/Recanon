@@ -1,0 +1,32 @@
+{
+  "runtime": "nexart-canonical-renderer",
+  "artifactId": "example-loop-001",
+  "snapshot": {
+    "code": "\n// Deterministic Loop Proof Program\n// Renders an animated pattern over 60 frames\n\nfunction setup() {\n  createCanvas(800, 600);\n  frameRate(30);\n}\n\nfunction draw() {\n  background(20, 24, 30);\n  randomSeed(SEED);\n  \n  const t = frameCount / 60; // Normalized time (0-1 over 60 frames)\n  const cols = 6;\n  const rows = 4;\n  const cellW = width / cols;\n  const cellH = height / rows;\n  \n  for (let i = 0; i < cols; i++) {\n    for (let j = 0; j < rows; j++) {\n      const x = i * cellW + cellW / 2;\n      const y = j * cellH + cellH / 2;\n      \n      const baseSize = map(VAR[0], 0, 100, 20, 60);\n      const animOffset = sin(t * TWO_PI + i * 0.5 + j * 0.3) * 10;\n      const size = baseSize + animOffset;\n      \n      const hue = map(VAR[1], 0, 100, 100, 220);\n      const alpha = map(sin(t * TWO_PI * 2 + i + j), -1, 1, 100, 255);\n      \n      fill(hue, 180, 200, alpha);\n      noStroke();\n      \n      push();\n      translate(x, y);\n      rotate(t * TWO_PI * 0.5 + random() * 0.1);\n      \n      if ((i + j) % 2 === 0) {\n        ellipse(0, 0, size, size);\n      } else {\n        rectMode(CENTER);\n        rect(0, 0, size * 0.8, size * 0.8);\n      }\n      pop();\n    }\n  }\n  \n  // Frame counter\n  fill(255);\n  textSize(12);\n  textFont('monospace');\n  text('FRAME: ' + frameCount + '/60  SEED: ' + SEED, 10, height - 10);\n  \n  if (frameCount >= 60) {\n    noLoop();\n  }\n}\n",
+    "seed": 42,
+    "vars": [50, 55, 30, 20, 10, 15, 5, 25, 40, 60],
+    "execution": {
+      "frames": 60,
+      "loop": true
+    }
+  },
+  "expectedImageHash": "REPLACE_WITH_ACTUAL_POSTER_HASH",
+  "expectedAnimationHash": "REPLACE_WITH_ACTUAL_ANIMATION_HASH",
+  "verificationRequirements": "loop-requires-both-hashes",
+  "canonical": {
+    "url": "https://nexart-canonical-renderer-production.up.railway.app",
+    "rendererVersion": "1.0.0",
+    "protocolVersion": "1.0"
+  },
+  "metadata": {
+    "protocol": "nexart",
+    "protocolVersion": "1.0",
+    "sdkVersion": "1.6.0",
+    "nodeVersion": "20.x",
+    "rendererVersion": "1.0.0",
+    "timestamp": "2025-01-19T00:00:00.000Z",
+    "deterministic": true
+  },
+  "createdAt": "2025-01-19T00:00:00.000Z",
+  "_note": "This is an example loop bundle. Both posterHash and animationHash must match for verification to pass."
+}
