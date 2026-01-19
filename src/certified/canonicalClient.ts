@@ -249,16 +249,15 @@ export async function renderCertified(
   console.log('[Canonical Client] Sending render request to:', url);
   console.log('[Canonical Client] Snapshot code length:', snapshot.code?.length ?? 'undefined');
   console.log('[Canonical Client] Snapshot seed:', snapshot.seed);
-  console.log('[Canonical Client] Snapshot vars:', snapshot.vars);
-  console.log('[Canonical Client] Full request body:', JSON.stringify({ snapshot }, null, 2).slice(0, 500) + '...');
   
   try {
+    // Send snapshot directly at root level (not wrapped in { snapshot: ... })
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ snapshot }),
+      body: JSON.stringify(snapshot),
     });
 
     if (!response.ok) {
