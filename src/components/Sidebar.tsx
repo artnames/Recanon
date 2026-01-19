@@ -17,7 +17,7 @@ const navItems = [
   { id: 'strategies', label: 'Strategies', icon: FileCode },
   { id: 'execute', label: 'Execute', icon: Play },
   { id: 'artifacts', label: 'Artifacts', icon: ShieldCheck },
-  { id: 'verify', label: 'Verify', icon: RotateCcw },
+  { id: 'verify', label: 'Verify & Test', icon: RotateCcw },
 ];
 
 const bottomItems = [
