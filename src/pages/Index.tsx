@@ -32,7 +32,7 @@ import {
 } from "@/types/certifiedArtifact";
 
 export default function Index() {
-  const [activeView, setActiveView] = useState("strategies");
+  const [activeView, setActiveView] = useState("guide");
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionSteps, setExecutionSteps] = useState<ExecutionStep[]>([]);
   const [selectedArtifact, setSelectedArtifact] = useState<ArtifactType | null>(null);
@@ -58,11 +58,11 @@ export default function Index() {
     const steps: ExecutionStep[] = mode === 'certified' 
       ? [
           { id: '1', label: 'Validating Parameters', status: 'active' },
-          { id: '2', label: 'Building Code Mode Snapshot', status: 'pending' },
+          { id: '2', label: 'Building Snapshot', status: 'pending' },
           { id: '3', label: 'Connecting to Canonical Renderer', status: 'pending' },
           { id: '4', label: 'Executing via Canonical Renderer', status: 'pending' },
-          { id: '5', label: 'Computing Image Hash', status: 'pending' },
-          { id: '6', label: 'Sealing Artifact', status: 'pending' },
+          { id: '5', label: 'Computing Output Hash', status: 'pending' },
+          { id: '6', label: 'Sealing Result', status: 'pending' },
         ]
       : [
           { id: '1', label: 'Loading Strategy', status: 'active' },
@@ -159,10 +159,11 @@ export default function Index() {
                 <div className="flex items-start gap-3">
                   <XCircle className="h-5 w-5 text-destructive mt-0.5" />
                   <div>
-                    <h3 className="font-semibold text-destructive">Certified Execution Failed</h3>
-                    <p className="text-sm text-destructive/80 mt-1">{executionError}</p>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      No fallback to mock runtime. Certified mode requires Canonical Renderer.
+                    <h3 className="font-semibold text-destructive">Sealed Execution Blocked</h3>
+                    <p className="text-sm text-muted-foreground mt-1">This request violates execution rules.</p>
+                    <p className="text-sm text-destructive/80 mt-2">{executionError}</p>
+                    <p className="text-xs text-muted-foreground mt-3">
+                      Fix: Ensure the Result includes valid execution code, or create a Result using "Start Here".
                     </p>
                   </div>
                 </div>
@@ -194,14 +195,14 @@ export default function Index() {
               </div>
             )}
 
-            {/* Certified Results */}
+            {/* Sealed Results */}
             {lastExecutionMode === 'certified' && certifiedResult && !isExecuting && !executionError && (
               <div className="pt-6 border-t border-border space-y-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <ShieldCheck className="w-6 h-6 text-verified" />
                     <div>
-                      <h2 className="text-xl font-semibold">Certified Result</h2>
+                      <h2 className="text-xl font-semibold">Sealed Result</h2>
                       <p className="text-sm text-muted-foreground font-mono">{certifiedResult.artifactId}</p>
                     </div>
                   </div>
@@ -270,7 +271,7 @@ export default function Index() {
         return (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div>
-              <h2 className="text-xl font-semibold mb-4">Certified Artifacts</h2>
+              <h2 className="text-xl font-semibold mb-4">Sealed Results</h2>
               <ArtifactsList artifacts={mockArtifacts} onSelect={setSelectedArtifact} selectedId={selectedArtifact?.id} />
             </div>
             <div className="lg:col-span-2">

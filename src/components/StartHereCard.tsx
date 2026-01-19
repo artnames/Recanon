@@ -176,12 +176,12 @@ export function StartHereCard({ onBundleGenerated }: StartHereCardProps) {
       onBundleGenerated(bundleJson, 'static');
       
       toast({
-        title: "Static bundle generated",
-        description: "Click 'Verify Bundle' to test verification.",
+        title: "Static result created",
+        description: "Click 'Check Result' to confirm the hash matches.",
       });
     } catch (err) {
       toast({
-        title: "Generation failed",
+        title: "Creation blocked",
         description: err instanceof Error ? err.message : 'Unknown error',
         variant: "destructive",
       });
@@ -236,12 +236,12 @@ export function StartHereCard({ onBundleGenerated }: StartHereCardProps) {
       onBundleGenerated(bundleJson, 'loop');
       
       toast({
-        title: "Loop bundle generated",
-        description: "Click 'Verify Bundle' to test verification with both hashes.",
+        title: "Loop result created",
+        description: "Click 'Check Result' to confirm both hashes match.",
       });
     } catch (err) {
       toast({
-        title: "Generation failed",
+        title: "Creation blocked",
         description: err instanceof Error ? err.message : 'Unknown error',
         variant: "destructive",
       });
@@ -287,8 +287,8 @@ export function StartHereCard({ onBundleGenerated }: StartHereCardProps) {
       onBundleGenerated(bundleJson, 'failed');
       
       toast({
-        title: "Tampered bundle generated",
-        description: "This bundle is expected to FAIL verification.",
+        title: "Tampered result created",
+        description: "This result is expected to FAIL the check.",
         variant: "destructive",
       });
     } catch (err) {
@@ -306,15 +306,15 @@ export function StartHereCard({ onBundleGenerated }: StartHereCardProps) {
     <div className="p-6 rounded-lg border-2 border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
       <div className="flex items-center gap-2 mb-4">
         <Sparkles className="w-5 h-5 text-primary" />
-        <h3 className="text-lg font-semibold">Start Here</h3>
+        <h3 className="text-lg font-semibold">Create a Result</h3>
       </div>
       
       <p className="text-sm text-muted-foreground mb-6">
-        Generate a real certified bundle from the Canonical Renderer, then verify it. No setup required.
+        Create a sealed result from the Canonical Renderer, then check it. No setup required.
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Generate Verified Static */}
+        {/* Create Result Static */}
         <Button
           variant="outline"
           className="h-auto py-5 flex flex-col items-center gap-3 border-verified/40 hover:border-verified hover:bg-verified/10 transition-all"
@@ -327,7 +327,7 @@ export function StartHereCard({ onBundleGenerated }: StartHereCardProps) {
             <Image className="w-6 h-6 text-verified" />
           )}
           <div className="text-center">
-            <div className="font-semibold">Generate Verified</div>
+            <div className="font-semibold">Create Result</div>
             <div className="font-semibold text-verified">(Static)</div>
           </div>
           <div className="text-xs text-muted-foreground">
@@ -335,7 +335,7 @@ export function StartHereCard({ onBundleGenerated }: StartHereCardProps) {
           </div>
         </Button>
 
-        {/* Generate Verified Loop */}
+        {/* Create Result Loop */}
         <Button
           variant="outline"
           className="h-auto py-5 flex flex-col items-center gap-3 border-verified/40 hover:border-verified hover:bg-verified/10 transition-all"
@@ -348,7 +348,7 @@ export function StartHereCard({ onBundleGenerated }: StartHereCardProps) {
             <Video className="w-6 h-6 text-verified" />
           )}
           <div className="text-center">
-            <div className="font-semibold">Generate Verified</div>
+            <div className="font-semibold">Create Result</div>
             <div className="font-semibold text-verified">(Loop)</div>
           </div>
           <div className="text-xs text-muted-foreground">
@@ -356,7 +356,7 @@ export function StartHereCard({ onBundleGenerated }: StartHereCardProps) {
           </div>
         </Button>
 
-        {/* Generate Failed */}
+        {/* Create Failed */}
         <Button
           variant="outline"
           className="h-auto py-5 flex flex-col items-center gap-3 border-destructive/40 hover:border-destructive hover:bg-destructive/10 transition-all"
@@ -369,11 +369,11 @@ export function StartHereCard({ onBundleGenerated }: StartHereCardProps) {
             <AlertTriangle className="w-6 h-6 text-destructive" />
           )}
           <div className="text-center">
-            <div className="font-semibold">Generate Failed</div>
+            <div className="font-semibold">Create Failed</div>
             <div className="font-semibold text-destructive">(Tampered)</div>
           </div>
           <div className="text-xs text-muted-foreground">
-            {lastBundle ? 'Flips hash to cause failure' : 'Generate proof first'}
+            {lastBundle ? 'Flips hash to cause failure' : 'Create result first'}
           </div>
         </Button>
       </div>
