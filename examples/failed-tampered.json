@@ -1,0 +1,33 @@
+{
+  "runtime": "nexart-canonical-renderer",
+  "artifactId": "example-tampered-001",
+  "snapshot": {
+    "code": "\n// Deterministic Static Proof Program\n// Renders a simple pattern of geometric shapes\n\nfunction setup() {\n  createCanvas(800, 600);\n  noLoop();\n}\n\nfunction draw() {\n  background(20, 24, 30);\n  randomSeed(SEED);\n  \n  // Draw grid of deterministic shapes\n  const cols = 8;\n  const rows = 6;\n  const cellW = width / cols;\n  const cellH = height / rows;\n  \n  for (let i = 0; i < cols; i++) {\n    for (let j = 0; j < rows; j++) {\n      const x = i * cellW + cellW / 2;\n      const y = j * cellH + cellH / 2;\n      const size = map(VAR[0], 0, 100, 10, 40);\n      const hue = map(VAR[1], 0, 100, 120, 200);\n      \n      fill(hue, 180, 200);\n      noStroke();\n      \n      if ((i + j) % 3 === 0) {\n        ellipse(x, y, size, size);\n      } else if ((i + j) % 3 === 1) {\n        rectMode(CENTER);\n        rect(x, y, size, size);\n      } else {\n        triangle(\n          x, y - size/2,\n          x - size/2, y + size/2,\n          x + size/2, y + size/2\n        );\n      }\n    }\n  }\n  \n  // Add text with seed info\n  fill(255);\n  textSize(12);\n  textFont('monospace');\n  text('SEED: ' + SEED, 10, height - 10);\n}\n",
+    "seed": 42,
+    "vars": [50, 55, 30, 20, 10, 15, 5, 25, 40, 60],
+    "execution": {
+      "frames": 1,
+      "loop": false
+    }
+  },
+  "expectedImageHash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "verificationRequirements": "static-single-hash",
+  "canonical": {
+    "url": "https://nexart-canonical-renderer-production.up.railway.app",
+    "rendererVersion": "1.0.0",
+    "protocolVersion": "1.0"
+  },
+  "metadata": {
+    "protocol": "nexart",
+    "protocolVersion": "1.0",
+    "sdkVersion": "1.6.0",
+    "nodeVersion": "20.x",
+    "rendererVersion": "1.0.0",
+    "timestamp": "2025-01-19T00:00:00.000Z",
+    "deterministic": true
+  },
+  "createdAt": "2025-01-19T00:00:00.000Z",
+  "_tampered": true,
+  "_tamperedAt": "2025-01-19T00:00:00.000Z",
+  "_note": "This bundle has been intentionally tampered with. The expectedImageHash is fake and will not match the recomputed output. Verification should return FAILED."
+}

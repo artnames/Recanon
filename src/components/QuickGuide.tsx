@@ -37,7 +37,7 @@ export function QuickGuide() {
             <div>
               <span className="font-medium">Configure canonical renderer URL</span>
               <p className="text-muted-foreground text-xs mt-0.5">
-                Set <code className="font-mono bg-muted px-1 rounded">VITE_CANONICAL_RENDERER_URL</code> or use localhost:5000
+                Set via environment variable or use the "Edit" button in the header
               </p>
             </div>
           </li>
@@ -168,9 +168,9 @@ export function QuickGuide() {
                 Canonical Renderer Unreachable
               </h4>
               <ul className="mt-2 text-xs text-muted-foreground space-y-1 pl-4">
-                <li>• Check <code className="font-mono bg-muted px-1 rounded">VITE_CANONICAL_RENDERER_URL</code></li>
-                <li>• Ensure server is running: <code className="font-mono bg-muted px-1 rounded">npm start</code> in renderer repo</li>
-                <li>• Default port is 5000</li>
+                <li>• Check your renderer URL configuration (use "Edit" in header)</li>
+                <li>• In hosted preview, use a public HTTPS URL (not localhost)</li>
+                <li>• Verify the canonical renderer server is running</li>
               </ul>
             </div>
             <div>
