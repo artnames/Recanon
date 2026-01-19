@@ -14,8 +14,8 @@ import { mockStrategies, mockArtifacts } from "@/data/mockData";
 import { 
   runCertifiedBacktest,
   runDraftBacktest,
-  isNexArtAvailable,
-  getNexArtInfo,
+  isCanonicalRendererAvailable,
+  getCanonicalRendererInfo,
   type ExecutionMode, 
   type CertifiedExecutionResult 
 } from "@/certified/engine";
@@ -110,13 +110,8 @@ export default function Index() {
     };
 
     if (mode === 'certified') {
-      // CERTIFIED MODE - Must use NexArt SDK, no fallback
+      // CERTIFIED MODE - Must use Canonical Renderer, no fallback
       try {
-        // Check SDK availability first
-        if (!isNexArtAvailable()) {
-          throw new Error('NexArt SDK is not available. Certified execution cannot proceed.');
-        }
-
         const result = await runCertifiedBacktest(executionParams);
         setCertifiedResult(result);
         
@@ -131,13 +126,13 @@ export default function Index() {
         setCurrentBundle(bundle);
         registerArtifact(bundle);
 
-        // Log NexArt metadata for verification
-        if (result.nexartMetadata) {
-          console.log('[NexArt] Certified execution completed:', {
-            protocol: result.nexartMetadata.protocol,
-            protocolVersion: result.nexartMetadata.protocolVersion,
-            sdkVersion: result.nexartMetadata.sdkVersion,
-            deterministic: result.nexartMetadata.deterministic,
+        // Log Canonical Renderer metadata for verification
+        if (result.canonicalMetadata) {
+          console.log('[Canonical Renderer] Certified execution completed:', {
+            protocol: result.canonicalMetadata.protocol,
+            protocolVersion: result.canonicalMetadata.protocolVersion,
+            rendererVersion: result.canonicalMetadata.rendererVersion,
+            deterministic: result.canonicalMetadata.deterministic,
           });
         }
       } catch (error) {

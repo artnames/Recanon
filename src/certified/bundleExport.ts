@@ -69,7 +69,7 @@ function computeOutputHash(
 export function createArtifactBundle(params: BundleCreationParams): ArtifactBundle {
   const { result, strategy, datasetId, datasetSource, parameters } = params;
   
-  const outputHash = computeOutputHash(result.equityCurve, result.metrics);
+  const outputHash = result.outputHash || computeOutputHash(result.equityCurve, result.metrics);
   const manifestHash = computeManifestHash(result.executionManifest);
   
   // Create bundle with deterministic field ordering
@@ -80,7 +80,6 @@ export function createArtifactBundle(params: BundleCreationParams): ArtifactBund
     strategy: {
       name: strategy.name,
       codeHash: strategy.codeHash,
-      // code: undefined, // Omit in v1 unless explicitly included
     },
     dataset: {
       datasetId,
@@ -105,6 +104,14 @@ export function createArtifactBundle(params: BundleCreationParams): ArtifactBund
       outputHash,
       verificationHash: result.verificationHash,
     },
+    // Include canonical renderer info if available
+    canonical: result.canonicalMetadata ? {
+      rendererUrl: result.canonicalMetadata.rendererUrl,
+      rendererVersion: result.canonicalMetadata.rendererVersion,
+      protocol: result.canonicalMetadata.protocol,
+      protocolVersion: result.canonicalMetadata.protocolVersion,
+      timestamp: result.canonicalMetadata.timestamp,
+    } : undefined,
   };
   
   return bundle;
@@ -114,7 +121,6 @@ export function createArtifactBundle(params: BundleCreationParams): ArtifactBund
  * Serializes bundle to JSON with consistent field ordering (deterministic)
  */
 export function serializeBundle(bundle: ArtifactBundle): string {
-  // Use replacer to ensure consistent ordering
   const orderedKeys = [
     'artifactVersion',
     'artifactId', 
@@ -124,7 +130,8 @@ export function serializeBundle(bundle: ArtifactBundle): string {
     'params',
     'manifest',
     'outputs',
-    'verification'
+    'verification',
+    'canonical'
   ];
   
   return JSON.stringify(bundle, orderedKeys, 2);

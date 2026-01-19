@@ -62,6 +62,18 @@ export interface ArtifactBundleVerification {
 }
 
 /**
+ * Canonical Renderer metadata
+ * Included in bundles for provenance tracking
+ */
+export interface ArtifactBundleCanonical {
+  rendererUrl: string;
+  rendererVersion: string;
+  protocol: string;
+  protocolVersion: string;
+  timestamp: string;
+}
+
+/**
  * Complete Artifact Bundle
  * 
  * Contains everything required to replay except the runtime itself.
@@ -79,6 +91,8 @@ export interface ArtifactBundle {
   };
   outputs: ArtifactBundleOutputs;
   verification: ArtifactBundleVerification;
+  /** Canonical renderer info - present for certified artifacts */
+  canonical?: ArtifactBundleCanonical;
 }
 
 /**
