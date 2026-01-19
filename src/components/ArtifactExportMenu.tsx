@@ -8,48 +8,54 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-import type { ArtifactBundle } from '@/types/artifactBundle';
-import { downloadBundle, generateReplayCommand } from '@/certified/bundleExport';
+import type { CertifiedArtifactBundle } from '@/types/certifiedArtifact';
+import { downloadBundle, serializeBundle } from '@/types/certifiedArtifact';
 import { toast } from '@/hooks/use-toast';
 
 interface ArtifactExportMenuProps {
-  bundle: ArtifactBundle | null;
+  bundle: CertifiedArtifactBundle | null;
+  artifactId: string;
   disabled?: boolean;
   variant?: 'default' | 'compact';
 }
 
-export function ArtifactExportMenu({ bundle, disabled = false, variant = 'default' }: ArtifactExportMenuProps) {
+export function ArtifactExportMenu({ 
+  bundle, 
+  artifactId,
+  disabled = false, 
+  variant = 'default' 
+}: ArtifactExportMenuProps) {
   const [copied, setCopied] = useState<'hash' | 'command' | null>(null);
 
   const handleDownloadBundle = () => {
     if (!bundle) return;
-    downloadBundle(bundle);
+    downloadBundle(bundle, artifactId);
     toast({
       title: 'Bundle Downloaded',
-      description: `${bundle.artifactId}-bundle.json saved`,
+      description: `${artifactId}-certified-bundle.json saved`,
     });
   };
 
   const handleCopyHash = async () => {
     if (!bundle) return;
-    await navigator.clipboard.writeText(bundle.verification.verificationHash);
+    await navigator.clipboard.writeText(bundle.expectedImageHash);
     setCopied('hash');
     setTimeout(() => setCopied(null), 2000);
     toast({
       title: 'Hash Copied',
-      description: 'Verification hash copied to clipboard',
+      description: 'Image hash copied to clipboard',
     });
   };
 
   const handleCopyCommand = async () => {
     if (!bundle) return;
-    const command = generateReplayCommand(bundle);
+    const command = `curl -X POST ${bundle.canonicalUrl}/verify -H "Content-Type: application/json" -d '${serializeBundle(bundle)}'`;
     await navigator.clipboard.writeText(command);
     setCopied('command');
     setTimeout(() => setCopied(null), 2000);
     toast({
       title: 'Command Copied',
-      description: 'Replay command copied to clipboard',
+      description: 'Verify command copied to clipboard',
     });
   };
 
@@ -65,7 +71,7 @@ export function ArtifactExportMenu({ bundle, disabled = false, variant = 'defaul
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="verified" size={variant === 'compact' ? 'sm' : 'default'}>
+        <Button variant="default" size={variant === 'compact' ? 'sm' : 'default'}>
           <Download className="w-4 h-4 mr-2" />
           Export
           <ChevronDown className="w-3 h-3 ml-1" />
@@ -94,8 +100,8 @@ export function ArtifactExportMenu({ bundle, disabled = false, variant = 'defaul
             <Terminal className="w-4 h-4 mr-2" />
           )}
           <div className="flex flex-col">
-            <span>Copy Replay Command</span>
-            <span className="text-xs text-muted-foreground">CLI verification script</span>
+            <span>Copy Verify Command</span>
+            <span className="text-xs text-muted-foreground">cURL command for verification</span>
           </div>
         </DropdownMenuItem>
         
@@ -106,9 +112,9 @@ export function ArtifactExportMenu({ bundle, disabled = false, variant = 'defaul
             <Copy className="w-4 h-4 mr-2" />
           )}
           <div className="flex flex-col">
-            <span>Copy Verification Hash</span>
+            <span>Copy Image Hash</span>
             <span className="text-xs font-mono text-muted-foreground truncate max-w-[180px]">
-              {bundle.verification.verificationHash.substring(0, 24)}...
+              {bundle.expectedImageHash.substring(0, 24)}...
             </span>
           </div>
         </DropdownMenuItem>

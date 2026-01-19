@@ -7,53 +7,42 @@ import { EquityChart } from "./EquityChart";
 import { DrawdownChart } from "./DrawdownChart";
 import { Button } from "./ui/button";
 import { ArtifactExportMenu } from "./ArtifactExportMenu";
-import type { ArtifactBundle } from "@/types/artifactBundle";
-import { ARTIFACT_BUNDLE_VERSION } from "@/types/artifactBundle";
+import type { CertifiedArtifactBundle } from "@/types/certifiedArtifact";
+import { generateBacktestCodeModeProgram, DEFAULT_VARS, varsToArray } from "@/certified/codeModeProgram";
+import { CANONICAL_RENDERER_URL } from "@/certified/canonicalClient";
 
 interface CertifiedArtifactProps {
   artifact: ArtifactType;
   onReplay?: () => void;
 }
 
-// Convert legacy artifact to bundle format for export
-function convertToBundle(artifact: ArtifactType): ArtifactBundle {
+// Convert legacy artifact to new bundle format for export
+function convertToBundle(artifact: ArtifactType): CertifiedArtifactBundle {
   return {
-    artifactVersion: ARTIFACT_BUNDLE_VERSION,
-    artifactId: artifact.id,
-    createdAt: artifact.executedAt,
-    strategy: {
-      name: artifact.strategyId,
-      codeHash: artifact.strategyHash,
-    },
-    dataset: {
-      datasetId: 'dataset-001',
-      datasetHash: artifact.datasetHash,
-      source: 'Historical Market Data',
-    },
-    params: {
+    bundleVersion: '2.0.0',
+    canonicalUrl: CANONICAL_RENDERER_URL,
+    snapshot: {
+      code: generateBacktestCodeModeProgram(),
       seed: artifact.executionSeed,
-      startDate: new Date(new Date(artifact.executedAt).getTime() - 365 * 24 * 60 * 60 * 1000 * 4).toISOString().split('T')[0],
-      endDate: artifact.executedAt.split('T')[0],
-      parameters: {},
+      vars: varsToArray(DEFAULT_VARS),
+      metadata: {
+        strategyId: artifact.strategyId,
+        strategyHash: artifact.strategyHash,
+        datasetId: 'dataset-001',
+        datasetHash: artifact.datasetHash,
+      },
     },
-    manifest: {
-      seed: artifact.executionSeed,
-      datasetHash: artifact.datasetHash,
-      strategyHash: artifact.strategyHash,
-      parametersHash: artifact.parameterHash,
-      startDate: new Date(new Date(artifact.executedAt).getTime() - 365 * 24 * 60 * 60 * 1000 * 4).toISOString().split('T')[0],
-      endDate: artifact.executedAt.split('T')[0],
+    expectedImageHash: artifact.verificationHash,
+    nodeMetadata: {
+      protocol: 'nexart',
+      protocolVersion: '1.2.0',
+      sdkVersion: '1.6.0',
+      nodeVersion: '20.x.x',
+      rendererVersion: '1.0.0',
       timestamp: artifact.executedAt,
-      manifestHash: artifact.parameterHash,
+      deterministic: true,
     },
-    outputs: {
-      equityCurve: artifact.equityCurve,
-      metrics: artifact.metrics,
-    },
-    verification: {
-      outputHash: artifact.verificationHash,
-      verificationHash: artifact.verificationHash,
-    },
+    timestamp: artifact.executedAt,
   };
 }
 
@@ -75,7 +64,7 @@ export function CertifiedArtifact({ artifact, onReplay }: CertifiedArtifactProps
               Executed {new Date(artifact.executedAt).toLocaleString()}
             </div>
             <div className="space-y-2">
-              <HashDisplay hash={artifact.verificationHash} label="Verification Hash" />
+              <HashDisplay hash={artifact.verificationHash} label="Image Hash" />
               <HashDisplay hash={artifact.strategyHash} label="Strategy" />
               <HashDisplay hash={artifact.datasetHash} label="Dataset" />
               <div className="flex items-center gap-2 text-xs">
@@ -85,16 +74,16 @@ export function CertifiedArtifact({ artifact, onReplay }: CertifiedArtifactProps
             </div>
           </div>
           <div className="flex flex-col gap-2">
-            <Button variant="verified" size="sm" onClick={onReplay}>
-              <Play className="w-3.5 h-3.5" />
+            <Button variant="default" size="sm" onClick={onReplay}>
+              <Play className="w-3.5 h-3.5 mr-1" />
               Replay
             </Button>
-            <ArtifactExportMenu bundle={bundle} variant="compact" />
+            <ArtifactExportMenu bundle={bundle} artifactId={artifact.id} variant="compact" />
           </div>
         </div>
-        <div className="mt-4 pt-4 border-t border-verified/20 text-xs text-muted-foreground">
+        <div className="mt-4 pt-4 border-t border-border text-xs text-muted-foreground">
           <span className="text-verified font-medium">Immutable:</span> This result cannot be altered. 
-          Anyone can independently verify by replaying with the same inputs.
+          Anyone can independently verify by replaying with the same inputs via the Canonical Renderer.
         </div>
       </div>
 
