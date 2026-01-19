@@ -6,7 +6,6 @@ import { ArtifactsList } from "@/components/ArtifactsList";
 import { CertifiedArtifact } from "@/components/CertifiedArtifact";
 import { VerifyPanel } from "@/components/VerifyPanel";
 import { DraftResultBanner } from "@/components/DraftResultBanner";
-import { CertifiedResultHeader } from "@/components/CertifiedResultHeader";
 import { MetricCard } from "@/components/MetricCard";
 import { EquityChart } from "@/components/EquityChart";
 import { DrawdownChart } from "@/components/DrawdownChart";
@@ -14,22 +13,20 @@ import { mockStrategies, mockArtifacts } from "@/data/mockData";
 import { 
   runCertifiedBacktest,
   runDraftBacktest,
-  isCanonicalRendererAvailable,
   getCanonicalRendererInfo,
+  CANONICAL_RENDERER_URL,
   type ExecutionMode, 
-  type CertifiedExecutionResult 
+  type CertifiedExecutionResult,
+  type DraftExecutionResult,
 } from "@/certified/engine";
-import { createArtifactBundle } from "@/certified/bundleExport";
-import type { ArtifactBundle } from "@/types/artifactBundle";
-import { registerArtifact } from "@/api/artifacts";
 import type { BacktestConfig, ExecutionStep, CertifiedArtifact as ArtifactType } from "@/types/backtest";
-import { AlertTriangle, XCircle } from "lucide-react";
-
-const DATASET_HASHES: Record<string, string> = {
-  'sp500-2020-2024': 'sha256:a7c9e3f2d8b4a1e6c5f9d2b8a3e7f4c1d9b5a2e8f6c3d7b1a4e9f5c2d8b3a6e7',
-  'nasdaq-2018-2024': 'sha256:f2b8c4d1e9a7f5c3d8b2a6e1f4c9d5b7a3e8f2c6d1b9a4e7f3c8d2b5a1e6f9c4',
-  'btc-2019-2024': 'sha256:c5d9a2e7f1b4c8d3a6e9f2b5c1d7a4e8f3b6c9d2a5e1f4b7c3d8a2e6f1b9c4d5',
-};
+import { XCircle, ShieldCheck, Download } from "lucide-react";
+import { HashDisplay } from "@/components/HashDisplay";
+import { Button } from "@/components/ui/button";
+import { 
+  createExportBundle, 
+  downloadBundle 
+} from "@/types/certifiedArtifact";
 
 export default function Index() {
   const [activeView, setActiveView] = useState("strategies");
@@ -40,8 +37,7 @@ export default function Index() {
   // Execution results
   const [lastExecutionMode, setLastExecutionMode] = useState<ExecutionMode | null>(null);
   const [certifiedResult, setCertifiedResult] = useState<CertifiedExecutionResult | null>(null);
-  const [draftResult, setDraftResult] = useState<CertifiedExecutionResult | null>(null);
-  const [currentBundle, setCurrentBundle] = useState<ArtifactBundle | null>(null);
+  const [draftResult, setDraftResult] = useState<DraftExecutionResult | null>(null);
   const [lastConfig, setLastConfig] = useState<BacktestConfig | null>(null);
   const [executionError, setExecutionError] = useState<string | null>(null);
 
@@ -50,7 +46,6 @@ export default function Index() {
     setLastExecutionMode(mode);
     setCertifiedResult(null);
     setDraftResult(null);
-    setCurrentBundle(null);
     setLastConfig(config);
     setExecutionError(null);
     
@@ -59,14 +54,12 @@ export default function Index() {
 
     const steps: ExecutionStep[] = mode === 'certified' 
       ? [
-          { id: '1', label: 'Validating Manifest', status: 'active' },
-          { id: '2', label: 'Loading Strategy', status: 'pending' },
-          { id: '3', label: 'Loading Dataset', status: 'pending' },
-          { id: '4', label: 'Initializing NexArt SDK', status: 'pending' },
-          { id: '5', label: 'Executing via NexArt Engine', status: 'pending' },
-          { id: '6', label: 'Computing Deterministic Metrics', status: 'pending' },
-          { id: '7', label: 'Generating Verification Hash', status: 'pending' },
-          { id: '8', label: 'Sealing Artifact', status: 'pending' },
+          { id: '1', label: 'Validating Parameters', status: 'active' },
+          { id: '2', label: 'Building Code Mode Snapshot', status: 'pending' },
+          { id: '3', label: 'Connecting to Canonical Renderer', status: 'pending' },
+          { id: '4', label: 'Executing via Canonical Renderer', status: 'pending' },
+          { id: '5', label: 'Computing Image Hash', status: 'pending' },
+          { id: '6', label: 'Sealing Artifact', status: 'pending' },
         ]
       : [
           { id: '1', label: 'Loading Strategy', status: 'active' },
@@ -77,19 +70,11 @@ export default function Index() {
     
     setExecutionSteps(steps);
 
-    // Simulate execution steps
     for (let i = 0; i < steps.length; i++) {
       await new Promise(resolve => setTimeout(resolve, mode === 'certified' ? 600 : 400));
       setExecutionSteps(prev => prev.map((step, idx) => {
         if (idx === i) {
-          return { 
-            ...step, 
-            status: 'completed', 
-            timestamp: new Date().toLocaleTimeString(),
-            hash: mode === 'certified' && idx >= 4 
-              ? `sha256:${Math.random().toString(36).substring(2, 18)}...` 
-              : undefined
-          };
+          return { ...step, status: 'completed', timestamp: new Date().toLocaleTimeString() };
         }
         if (idx === i + 1) {
           return { ...step, status: 'active' };
@@ -98,57 +83,24 @@ export default function Index() {
       }));
     }
 
-    const executionParams = {
-      strategyId: config.strategyId,
-      strategyHash: strategy.codeHash,
-      datasetId: config.dataset,
-      datasetHash: DATASET_HASHES[config.dataset] || DATASET_HASHES['sp500-2020-2024'],
-      startDate: config.startDate,
-      endDate: config.endDate,
-      seed: config.seed,
-      parameters: config.parameters
-    };
-
     if (mode === 'certified') {
-      // CERTIFIED MODE - Must use Canonical Renderer, no fallback
       try {
-        const result = await runCertifiedBacktest(executionParams);
-        setCertifiedResult(result);
-        
-        // Create and register bundle for API access
-        const bundle = createArtifactBundle({
-          result,
-          strategy,
+        const result = await runCertifiedBacktest({
+          seed: config.seed,
+          strategyId: config.strategyId,
+          strategyHash: strategy.codeHash,
           datasetId: config.dataset,
-          datasetSource: config.dataset.replace(/-/g, ' ').toUpperCase(),
-          parameters: config.parameters,
         });
-        setCurrentBundle(bundle);
-        registerArtifact(bundle);
-
-        // Log Canonical Renderer metadata for verification
-        if (result.canonicalMetadata) {
-          console.log('[Canonical Renderer] Certified execution completed:', {
-            protocol: result.canonicalMetadata.protocol,
-            protocolVersion: result.canonicalMetadata.protocolVersion,
-            rendererVersion: result.canonicalMetadata.rendererVersion,
-            deterministic: result.canonicalMetadata.deterministic,
-          });
-        }
+        setCertifiedResult(result);
+        console.log('[Canonical Renderer] Certified execution completed:', result.canonicalMetadata);
       } catch (error) {
-        // NO FALLBACK - show error state
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         console.error('Certified execution failed:', errorMessage);
         setExecutionError(errorMessage);
-        setExecutionSteps(prev => prev.map(step => ({
-          ...step,
-          status: step.status === 'completed' ? 'completed' : 'pending'
-        })));
       }
     } else {
-      // DRAFT MODE - Uses mock runtime, NOT verifiable
       try {
-        const result = await runDraftBacktest(executionParams);
+        const result = await runDraftBacktest(config.seed, config.startDate, config.endDate);
         setDraftResult(result);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -159,6 +111,29 @@ export default function Index() {
 
     setIsExecuting(false);
   }, []);
+
+  const handleExportBundle = () => {
+    if (!certifiedResult) return;
+    
+    const bundle = createExportBundle(
+      {
+        runtime: 'nexart-canonical-renderer',
+        artifactId: certifiedResult.artifactId,
+        snapshot: certifiedResult.snapshot,
+        imageHash: certifiedResult.imageHash,
+        animationHash: certifiedResult.animationHash,
+        outputBase64: certifiedResult.outputBase64,
+        mimeType: certifiedResult.mimeType,
+        nodeMetadata: certifiedResult.canonicalMetadata,
+        metrics: certifiedResult.metrics,
+        sealed: true,
+        createdAt: certifiedResult.canonicalMetadata.timestamp,
+      },
+      CANONICAL_RENDERER_URL,
+      true
+    );
+    downloadBundle(bundle, certifiedResult.artifactId);
+  };
 
   const renderContent = () => {
     switch (activeView) {
@@ -184,107 +159,105 @@ export default function Index() {
                     <h3 className="font-semibold text-destructive">Certified Execution Failed</h3>
                     <p className="text-sm text-destructive/80 mt-1">{executionError}</p>
                     <p className="text-xs text-muted-foreground mt-2">
-                      No fallback to mock runtime. Certified mode requires NexArt SDK.
+                      No fallback to mock runtime. Certified mode requires Canonical Renderer.
                     </p>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Results Section */}
-            {(certifiedResult || draftResult) && !isExecuting && !executionError && (
+            {/* Draft Results */}
+            {lastExecutionMode === 'draft' && draftResult && !isExecuting && !executionError && (
               <div className="pt-6 border-t border-border space-y-6">
                 <h2 className="text-xl font-semibold">Execution Results</h2>
+                <DraftResultBanner />
                 
-                {lastExecutionMode === 'draft' && draftResult && (
-                  <>
-                    <DraftResultBanner />
-                    
-                    {/* Draft Metrics */}
-                    <div>
-                      <h3 className="section-header">Performance Metrics (Draft)</h3>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <MetricCard 
-                          label="Total Return" 
-                          value={`${draftResult.metrics.totalReturn >= 0 ? '+' : ''}${draftResult.metrics.totalReturn.toFixed(2)}`}
-                          suffix="%"
-                        />
-                        <MetricCard 
-                          label="Sharpe Ratio" 
-                          value={draftResult.metrics.sharpeRatio.toFixed(2)}
-                        />
-                        <MetricCard 
-                          label="Max Drawdown" 
-                          value={draftResult.metrics.maxDrawdown.toFixed(2)}
-                          suffix="%"
-                        />
-                        <MetricCard 
-                          label="Win Rate" 
-                          value={draftResult.metrics.winRate.toFixed(1)}
-                          suffix="%"
-                        />
-                      </div>
-                    </div>
+                <div>
+                  <h3 className="section-header">Performance Metrics (Draft)</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <MetricCard label="Total Return" value={`${draftResult.metrics.totalReturn >= 0 ? '+' : ''}${draftResult.metrics.totalReturn.toFixed(2)}`} suffix="%" />
+                    <MetricCard label="Sharpe Ratio" value={draftResult.metrics.sharpeRatio.toFixed(2)} />
+                    <MetricCard label="Max Drawdown" value={draftResult.metrics.maxDrawdown.toFixed(2)} suffix="%" />
+                    <MetricCard label="Win Rate" value={draftResult.metrics.winRate.toFixed(1)} suffix="%" />
+                  </div>
+                </div>
 
-                    {/* Draft Charts */}
+                <div>
+                  <h3 className="section-header">Equity Curve (Draft)</h3>
+                  <div className="p-4 rounded-md border border-border bg-card">
+                    <EquityChart data={draftResult.equityCurve} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Certified Results */}
+            {lastExecutionMode === 'certified' && certifiedResult && !isExecuting && !executionError && (
+              <div className="pt-6 border-t border-border space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <ShieldCheck className="w-6 h-6 text-verified" />
                     <div>
-                      <h3 className="section-header">Equity Curve (Draft)</h3>
-                      <div className="p-4 rounded-md border border-border bg-card">
-                        <EquityChart data={draftResult.equityCurve} />
-                      </div>
+                      <h2 className="text-xl font-semibold">Certified Result</h2>
+                      <p className="text-sm text-muted-foreground font-mono">{certifiedResult.artifactId}</p>
                     </div>
-                  </>
+                  </div>
+                  <Button variant="outline" onClick={handleExportBundle}>
+                    <Download className="w-4 h-4 mr-2" />
+                    Export Bundle
+                  </Button>
+                </div>
+
+                {/* Image Output */}
+                <div className="p-4 rounded-md border border-border bg-card">
+                  <h3 className="section-header mb-3">Rendered Output</h3>
+                  <img 
+                    src={`data:${certifiedResult.mimeType};base64,${certifiedResult.outputBase64}`}
+                    alt="Certified backtest visualization"
+                    className="w-full rounded-md border border-border"
+                  />
+                </div>
+
+                {/* Hash Display */}
+                <div className="p-4 rounded-md border border-border bg-card space-y-3">
+                  <h3 className="section-header">Image Hash (SHA-256)</h3>
+                  <HashDisplay hash={certifiedResult.imageHash} truncate={false} />
+                  <p className="text-xs text-muted-foreground">
+                    This hash uniquely identifies the rendered output. Any change to inputs produces a different hash.
+                  </p>
+                </div>
+
+                {/* Metrics */}
+                {certifiedResult.metrics && (
+                  <div>
+                    <h3 className="section-header">Computed Metrics</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <MetricCard label="Total Return" value={`${certifiedResult.metrics.totalReturn >= 0 ? '+' : ''}${(certifiedResult.metrics.totalReturn * 100).toFixed(2)}`} suffix="%" trend={certifiedResult.metrics.totalReturn >= 0 ? 'up' : 'down'} />
+                      <MetricCard label="CAGR" value={`${(certifiedResult.metrics.cagr * 100).toFixed(2)}`} suffix="%" />
+                      <MetricCard label="Max Drawdown" value={(certifiedResult.metrics.maxDrawdown * 100).toFixed(2)} suffix="%" trend="down" />
+                      <MetricCard label="Volatility" value={(certifiedResult.metrics.volatility * 100).toFixed(2)} suffix="%" />
+                      <MetricCard label="Sharpe (est)" value={certifiedResult.metrics.sharpeEstimate.toFixed(2)} />
+                      <MetricCard label="Final Equity" value={`$${certifiedResult.metrics.finalEquity.toLocaleString()}`} />
+                    </div>
+                  </div>
                 )}
 
-                {lastExecutionMode === 'certified' && certifiedResult && (
-                  <>
-                    <CertifiedResultHeader result={certifiedResult} bundle={currentBundle} />
-                    
-                    {/* Certified Metrics */}
-                    <div>
-                      <h3 className="section-header">Performance Metrics</h3>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <MetricCard 
-                          label="Total Return" 
-                          value={`${certifiedResult.metrics.totalReturn >= 0 ? '+' : ''}${certifiedResult.metrics.totalReturn.toFixed(2)}`}
-                          suffix="%"
-                          trend={certifiedResult.metrics.totalReturn >= 0 ? 'up' : 'down'}
-                        />
-                        <MetricCard 
-                          label="Sharpe Ratio" 
-                          value={certifiedResult.metrics.sharpeRatio.toFixed(2)}
-                          trend={certifiedResult.metrics.sharpeRatio >= 1 ? 'up' : 'neutral'}
-                        />
-                        <MetricCard 
-                          label="Max Drawdown" 
-                          value={certifiedResult.metrics.maxDrawdown.toFixed(2)}
-                          suffix="%"
-                          trend="down"
-                        />
-                        <MetricCard 
-                          label="Win Rate" 
-                          value={certifiedResult.metrics.winRate.toFixed(1)}
-                          suffix="%"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Certified Charts */}
-                    <div>
-                      <h3 className="section-header">Equity Curve</h3>
-                      <div className="p-4 rounded-md border border-border bg-card">
-                        <EquityChart data={certifiedResult.equityCurve} />
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3 className="section-header">Drawdown</h3>
-                      <div className="p-4 rounded-md border border-border bg-card">
-                        <DrawdownChart data={certifiedResult.equityCurve} />
-                      </div>
-                    </div>
-                  </>
-                )}
+                {/* Node Metadata */}
+                <div className="p-4 rounded-md border border-border bg-card">
+                  <h3 className="section-header mb-3">Node Metadata</h3>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="text-muted-foreground">Protocol:</div>
+                    <div className="font-mono">{certifiedResult.canonicalMetadata.protocol} v{certifiedResult.canonicalMetadata.protocolVersion}</div>
+                    <div className="text-muted-foreground">SDK Version:</div>
+                    <div className="font-mono">{certifiedResult.canonicalMetadata.sdkVersion}</div>
+                    <div className="text-muted-foreground">Node Version:</div>
+                    <div className="font-mono">{certifiedResult.canonicalMetadata.nodeVersion}</div>
+                    <div className="text-muted-foreground">Renderer:</div>
+                    <div className="font-mono">{certifiedResult.canonicalMetadata.rendererVersion}</div>
+                    <div className="text-muted-foreground">Deterministic:</div>
+                    <div className="text-verified font-mono">Yes</div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -295,11 +268,7 @@ export default function Index() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div>
               <h2 className="text-xl font-semibold mb-4">Certified Artifacts</h2>
-              <ArtifactsList
-                artifacts={mockArtifacts}
-                onSelect={setSelectedArtifact}
-                selectedId={selectedArtifact?.id}
-              />
+              <ArtifactsList artifacts={mockArtifacts} onSelect={setSelectedArtifact} selectedId={selectedArtifact?.id} />
             </div>
             <div className="lg:col-span-2">
               {selectedArtifact ? (
@@ -347,30 +316,4 @@ export default function Index() {
       </main>
     </div>
   );
-}
-
-// Helper function for draft mode
-function generateMockEquityCurve(startDate: string, endDate: string) {
-  const points: Array<{ date: string; equity: number; drawdown: number }> = [];
-  let equity = 100000;
-  let peak = equity;
-  
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const dayMs = 24 * 60 * 60 * 1000;
-  
-  for (let d = start; d <= end; d = new Date(d.getTime() + dayMs * 7)) {
-    const change = (Math.random() - 0.45) * 0.03;
-    equity = equity * (1 + change);
-    peak = Math.max(peak, equity);
-    const drawdown = ((equity - peak) / peak) * 100;
-    
-    points.push({
-      date: d.toISOString().split('T')[0],
-      equity: Math.round(equity),
-      drawdown: Math.round(drawdown * 100) / 100
-    });
-  }
-  
-  return points;
 }

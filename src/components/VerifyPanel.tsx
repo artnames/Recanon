@@ -14,21 +14,20 @@ interface VerificationResult {
   originalHash?: string;
   computedHash?: string;
   matchDetails?: {
-    strategyMatch: boolean;
-    datasetMatch: boolean;
-    parametersMatch: boolean;
+    codeMatch: boolean;
+    seedMatch: boolean;
+    varsMatch: boolean;
     outputMatch: boolean;
   };
   error?: string;
   rendererVersion?: string;
+  nodeVersion?: string;
 }
 
 export function VerifyPanel() {
-  const [artifactId, setArtifactId] = useState('');
   const [bundleJson, setBundleJson] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [result, setResult] = useState<VerificationResult | null>(null);
-  const [verifyMode, setVerifyMode] = useState<'id' | 'bundle'>('bundle');
 
   const rendererInfo = getCanonicalRendererInfo();
 
@@ -41,8 +40,42 @@ export function VerifyPanel() {
     try {
       const bundle = JSON.parse(bundleJson);
       
+      // Handle both new and legacy bundle formats
+      let snapshot: CanonicalSnapshot;
+      let expectedHash: string;
+      
+      if (bundle.snapshot && bundle.snapshot.code) {
+        // New Code Mode bundle format
+        snapshot = bundle.snapshot;
+        expectedHash = bundle.expectedImageHash || bundle.verification?.imageHash;
+      } else if (bundle.params && bundle.strategy) {
+        // Legacy bundle format - not supported for Code Mode verification
+        setResult({
+          status: 'error',
+          error: 'Legacy bundle format detected. Please use a Code Mode artifact bundle.',
+        });
+        setIsVerifying(false);
+        return;
+      } else {
+        setResult({
+          status: 'error',
+          error: 'Invalid bundle format. Expected Code Mode snapshot with code, seed, and vars.',
+        });
+        setIsVerifying(false);
+        return;
+      }
+
+      if (!expectedHash) {
+        setResult({
+          status: 'error',
+          error: 'Bundle missing expectedImageHash field.',
+        });
+        setIsVerifying(false);
+        return;
+      }
+
       // Verify via Canonical Renderer
-      const verifyResult = await verifyBundleViaCanonical(bundle);
+      const verifyResult = await verifyCertified(snapshot, expectedHash);
 
       if (verifyResult.error) {
         setResult({
@@ -56,6 +89,7 @@ export function VerifyPanel() {
           computedHash: verifyResult.data.computedHash,
           matchDetails: verifyResult.data.matchDetails,
           rendererVersion: verifyResult.data.rendererVersion,
+          nodeVersion: verifyResult.data.nodeVersion,
         });
       } else if (verifyResult.data) {
         setResult({
@@ -64,6 +98,7 @@ export function VerifyPanel() {
           computedHash: verifyResult.data.computedHash,
           matchDetails: verifyResult.data.matchDetails,
           rendererVersion: verifyResult.data.rendererVersion,
+          nodeVersion: verifyResult.data.nodeVersion,
         });
       } else {
         setResult({
@@ -96,9 +131,10 @@ export function VerifyPanel() {
   return (
     <div className="max-w-2xl space-y-6">
       <div>
-        <h2 className="text-xl font-semibold mb-2">Verify Artifact</h2>
+        <h2 className="text-xl font-semibold mb-2">Verify Certified Artifact</h2>
         <p className="text-sm text-muted-foreground">
           Upload or paste a Certified Artifact bundle to verify it via the Canonical Renderer.
+          No fallback. No mock. Server-side execution only.
         </p>
       </div>
 
@@ -167,7 +203,7 @@ export function VerifyPanel() {
 
       {/* Result */}
       {result && (
-        <div className={`p-6 rounded-lg border-2 ${
+        <div className={`p-6 rounded-md border-2 ${
           result.status === 'verified' 
             ? 'border-verified/40 bg-verified/5' 
             : result.status === 'error'
@@ -179,7 +215,7 @@ export function VerifyPanel() {
               <>
                 <ShieldCheck className="w-8 h-8 text-verified" />
                 <div>
-                  <div className="text-lg font-semibold text-verified">VERIFIED</div>
+                  <div className="text-lg font-semibold text-verified font-mono">VERIFIED</div>
                   <div className="text-sm text-muted-foreground">
                     All checks passed via Canonical Renderer
                     {result.rendererVersion && ` (v${result.rendererVersion})`}
@@ -190,7 +226,7 @@ export function VerifyPanel() {
               <>
                 <AlertTriangle className="w-8 h-8 text-warning" />
                 <div>
-                  <div className="text-lg font-semibold text-warning">Verification Error</div>
+                  <div className="text-lg font-semibold text-warning font-mono">ERROR</div>
                   <div className="text-sm text-muted-foreground">{result.error}</div>
                 </div>
               </>
@@ -198,7 +234,7 @@ export function VerifyPanel() {
               <>
                 <AlertTriangle className="w-8 h-8 text-destructive" />
                 <div>
-                  <div className="text-lg font-semibold text-destructive">FAILED</div>
+                  <div className="text-lg font-semibold text-destructive font-mono">FAILED</div>
                   <div className="text-sm text-muted-foreground">Hash mismatch detected</div>
                 </div>
               </>
@@ -208,11 +244,11 @@ export function VerifyPanel() {
           {result.matchDetails && (
             <div className="space-y-3 mt-4 pt-4 border-t border-border">
               <h4 className="section-header">Verification Details</h4>
-              {Object.entries(result.matchDetails).map(([key, match]) => (
-                <div key={key} className="flex items-center justify-between text-sm">
-                  <span className="capitalize">{key.replace('Match', ' Hash')}</span>
-                  <span className={match ? 'text-verified' : 'text-destructive'}>
-                    {match ? (
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span>Code</span>
+                  <span className={result.matchDetails.codeMatch ? 'text-verified' : 'text-destructive'}>
+                    {result.matchDetails.codeMatch ? (
                       <span className="flex items-center gap-1">
                         <CheckCircle2 className="w-4 h-4" /> Match
                       </span>
@@ -223,20 +259,67 @@ export function VerifyPanel() {
                     )}
                   </span>
                 </div>
-              ))}
+                <div className="flex items-center justify-between">
+                  <span>Seed</span>
+                  <span className={result.matchDetails.seedMatch ? 'text-verified' : 'text-destructive'}>
+                    {result.matchDetails.seedMatch ? (
+                      <span className="flex items-center gap-1">
+                        <CheckCircle2 className="w-4 h-4" /> Match
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1">
+                        <AlertTriangle className="w-4 h-4" /> Mismatch
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>VAR[0-9]</span>
+                  <span className={result.matchDetails.varsMatch ? 'text-verified' : 'text-destructive'}>
+                    {result.matchDetails.varsMatch ? (
+                      <span className="flex items-center gap-1">
+                        <CheckCircle2 className="w-4 h-4" /> Match
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1">
+                        <AlertTriangle className="w-4 h-4" /> Mismatch
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Output</span>
+                  <span className={result.matchDetails.outputMatch ? 'text-verified' : 'text-destructive'}>
+                    {result.matchDetails.outputMatch ? (
+                      <span className="flex items-center gap-1">
+                        <CheckCircle2 className="w-4 h-4" /> Match
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1">
+                        <AlertTriangle className="w-4 h-4" /> Mismatch
+                      </span>
+                    )}
+                  </span>
+                </div>
+              </div>
             </div>
           )}
 
           {result.originalHash && result.computedHash && (
             <div className="space-y-2 mt-4 pt-4 border-t border-border">
               <div>
-                <span className="text-xs text-muted-foreground">Original Hash</span>
+                <span className="text-xs text-muted-foreground">Expected Hash</span>
                 <HashDisplay hash={result.originalHash} truncate={false} className="mt-1" />
               </div>
               <div>
                 <span className="text-xs text-muted-foreground">Computed Hash</span>
                 <HashDisplay hash={result.computedHash} truncate={false} className="mt-1" />
               </div>
+              {result.nodeVersion && (
+                <div className="mt-2 text-xs text-muted-foreground">
+                  Node: {result.nodeVersion}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -247,13 +330,15 @@ export function VerifyPanel() {
         <h4 className="font-medium text-sm mb-2">How Verification Works</h4>
         <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
           <li>Upload or paste a certified artifact bundle JSON</li>
-          <li>The bundle is sent to the Canonical Renderer at <code className="font-mono text-xs">/verify</code></li>
-          <li>The renderer re-executes with identical inputs and seed</li>
-          <li>Output hashes are computed and compared</li>
-          <li>Any discrepancy fails verification</li>
+          <li>Bundle is sent to Canonical Renderer at <code className="font-mono text-xs">/verify</code></li>
+          <li>Renderer re-executes Code Mode program with identical seed &amp; VAR[0-9]</li>
+          <li>Output image hash is computed and compared</li>
+          <li>Any discrepancy = FAILED (no fallback)</li>
         </ol>
         <p className="text-xs text-muted-foreground mt-3 pt-3 border-t border-border">
           No authentication required. Anyone can verify any certified artifact.
+          <br />
+          No browser SDK. No PRNG mirror. Server-side determinism only.
         </p>
       </div>
     </div>
