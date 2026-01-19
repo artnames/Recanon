@@ -9,7 +9,7 @@ import { Button } from "./ui/button";
 import { ArtifactExportMenu } from "./ArtifactExportMenu";
 import type { CertifiedArtifactBundle } from "@/types/certifiedArtifact";
 import { generateBacktestCodeModeProgram, DEFAULT_VARS, varsToArray } from "@/certified/codeModeProgram";
-import { CANONICAL_RENDERER_URL } from "@/certified/canonicalClient";
+import { getCanonicalUrl } from "@/certified/canonicalClient";
 
 interface CertifiedArtifactProps {
   artifact: ArtifactType;
@@ -21,7 +21,7 @@ interface CertifiedArtifactProps {
 function convertToBundle(artifact: ArtifactType): CertifiedArtifactBundle {
   return {
     bundleVersion: '2.0.0',
-    canonicalUrl: CANONICAL_RENDERER_URL,
+    canonicalUrl: getCanonicalUrl(),
     snapshot: {
       code: generateBacktestCodeModeProgram(),
       seed: artifact.executionSeed,

@@ -11,15 +11,16 @@
 
 import type { CodeModeSnapshot, CodeModeVars } from './codeModeProgram';
 import { varsToArray, DEFAULT_VARS, generateBacktestCodeModeProgram } from './codeModeProgram';
+import { getCanonicalUrl, hasLocalOverride } from './canonicalConfig';
+
+// Re-export config functions for convenience
+export { getCanonicalUrl, setCanonicalUrl, clearCanonicalUrl, hasLocalOverride } from './canonicalConfig';
 
 /**
- * Canonical Renderer URL
- * Configure via environment variable VITE_CANONICAL_RENDERER_URL
- * Falls back to localhost:5000 for local development only
+ * @deprecated Use getCanonicalUrl() instead for dynamic resolution
+ * This export is kept for backwards compatibility but always returns current resolved URL
  */
-export const CANONICAL_RENDERER_URL = 
-  import.meta.env.VITE_CANONICAL_RENDERER_URL || 
-  'http://localhost:5000';
+export const CANONICAL_RENDERER_URL = getCanonicalUrl();
 
 // ============================================================
 // REQUEST/RESPONSE TYPES
@@ -175,7 +176,8 @@ export interface LegacyCanonicalSnapshot {
  */
 export async function isCanonicalRendererAvailable(): Promise<boolean> {
   try {
-    const response = await fetch(`${CANONICAL_RENDERER_URL}/health`, {
+    const url = getCanonicalUrl();
+    const response = await fetch(`${url}/health`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -186,27 +188,62 @@ export async function isCanonicalRendererAvailable(): Promise<boolean> {
 }
 
 /**
+ * Check health with detailed error info
+ */
+export async function checkCanonicalHealth(): Promise<{
+  available: boolean;
+  latency?: number;
+  error?: string;
+}> {
+  const url = getCanonicalUrl();
+  const start = performance.now();
+  
+  try {
+    const response = await fetch(`${url}/health`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const latency = Math.round(performance.now() - start);
+    
+    if (response.ok) {
+      return { available: true, latency };
+    } else {
+      return { 
+        available: false, 
+        error: `HTTP ${response.status}: ${response.statusText}` 
+      };
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return { available: false, error: message };
+  }
+}
+
+/**
  * Get Canonical Renderer info
  */
 export function getCanonicalRendererInfo(): {
   url: string;
   configured: boolean;
+  hasOverride: boolean;
 } {
   return {
-    url: CANONICAL_RENDERER_URL,
+    url: getCanonicalUrl(),
     configured: !!import.meta.env.VITE_CANONICAL_RENDERER_URL,
+    hasOverride: hasLocalOverride(),
   };
 }
 
 /**
  * Render a certified backtest via the Canonical Renderer
  * 
- * POST ${CANONICAL_RENDERER_URL}/render
+ * POST /render
  */
 export async function renderCertified(
   snapshot: CanonicalSnapshot
 ): Promise<CanonicalRenderResponse> {
-  const url = `${CANONICAL_RENDERER_URL}/render`;
+  const baseUrl = getCanonicalUrl();
+  const url = `${baseUrl}/render`;
   
   try {
     const response = await fetch(url, {
@@ -239,14 +276,15 @@ export async function renderCertified(
 /**
  * Verify a static (non-loop) certified result via the Canonical Renderer
  * 
- * POST ${CANONICAL_RENDERER_URL}/verify
+ * POST /verify
  * Request: { snapshot, expectedHash }
  */
 export async function verifyCertifiedStatic(
   snapshot: CanonicalSnapshot,
   expectedHash: string
 ): Promise<CanonicalVerifyResponse> {
-  const url = `${CANONICAL_RENDERER_URL}/verify`;
+  const baseUrl = getCanonicalUrl();
+  const url = `${baseUrl}/verify`;
   
   try {
     const response = await fetch(url, {
@@ -284,7 +322,7 @@ export async function verifyCertifiedStatic(
  * Loop verification REQUIRES both poster AND animation hashes.
  * Never use expectedHash for loop mode.
  * 
- * POST ${CANONICAL_RENDERER_URL}/verify
+ * POST /verify
  * Request: { snapshot, expectedPosterHash, expectedAnimationHash }
  */
 export async function verifyCertifiedLoop(
@@ -292,7 +330,8 @@ export async function verifyCertifiedLoop(
   expectedPosterHash: string,
   expectedAnimationHash: string
 ): Promise<CanonicalVerifyResponse> {
-  const url = `${CANONICAL_RENDERER_URL}/verify`;
+  const baseUrl = getCanonicalUrl();
+  const url = `${baseUrl}/verify`;
   
   try {
     const response = await fetch(url, {
