@@ -7,6 +7,7 @@ import { CertifiedArtifact } from "@/components/CertifiedArtifact";
 import { VerifyPanel } from "@/components/VerifyPanel";
 import { DatasetsPage } from "@/components/DatasetsPage";
 import { SettingsPage } from "@/components/SettingsPage";
+import { HowItWorksPanel } from "@/components/HowItWorksPanel";
 import { DraftResultBanner } from "@/components/DraftResultBanner";
 import { MetricCard } from "@/components/MetricCard";
 import { EquityChart } from "@/components/EquityChart";
@@ -283,6 +284,9 @@ export default function Index() {
             </div>
           </div>
         );
+      
+      case 'guide':
+        return <HowItWorksPanel />;
       
       case 'verify':
         return <VerifyPanel />;
