@@ -35,8 +35,8 @@ export function Sidebar({ activeView, onViewChange }: SidebarProps) {
             <ShieldCheck className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <div className="font-semibold text-sm">NexArt</div>
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Protocol</div>
+            <div className="font-semibold text-sm">Recanon</div>
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Certified Backtests</div>
           </div>
         </div>
       </div>
