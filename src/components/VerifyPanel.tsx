@@ -1,17 +1,31 @@
 import { useState } from "react";
-import { Search, ShieldCheck, AlertTriangle, CheckCircle2, Loader2, Upload } from "lucide-react";
+import { Search, ShieldCheck, AlertTriangle, CheckCircle2, Loader2, Upload, Info } from "lucide-react";
 import { Button } from "./ui/button";
 import { HashDisplay } from "./HashDisplay";
 import { 
-  verifyCertified, 
+  verifyCertifiedStatic,
+  verifyCertifiedLoop,
   getCanonicalRendererInfo,
-  type CanonicalSnapshot 
+  isLoopMode,
+  type CanonicalSnapshot,
+  type CanonicalVerifyResponse,
 } from "@/certified/canonicalClient";
 
-interface VerificationResult {
-  status: 'verified' | 'mismatch' | 'not_found' | 'error';
+interface VerificationState {
+  status: 'verified' | 'mismatch' | 'error';
+  mode: 'static' | 'loop';
+  // Static mode fields
   originalHash?: string;
   computedHash?: string;
+  // Loop mode fields
+  posterVerified?: boolean;
+  expectedPosterHash?: string;
+  computedPosterHash?: string;
+  animationVerified?: boolean;
+  expectedAnimationHash?: string;
+  computedAnimationHash?: string;
+  hashMatchType?: string;
+  // Common fields
   matchDetails?: {
     codeMatch: boolean;
     seedMatch: boolean;
@@ -26,7 +40,7 @@ interface VerificationResult {
 export function VerifyPanel() {
   const [bundleJson, setBundleJson] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
-  const [result, setResult] = useState<VerificationResult | null>(null);
+  const [result, setResult] = useState<VerificationState | null>(null);
 
   const rendererInfo = getCanonicalRendererInfo();
 
@@ -39,53 +53,77 @@ export function VerifyPanel() {
     try {
       const bundle = JSON.parse(bundleJson);
       
-      // Handle both new and legacy bundle formats
-      let snapshot: CanonicalSnapshot;
-      let expectedHash: string;
-      
-      if (bundle.snapshot && bundle.snapshot.code) {
-        // New Code Mode bundle format
-        snapshot = bundle.snapshot;
-        expectedHash = bundle.expectedImageHash || bundle.verification?.imageHash;
-      } else if (bundle.params && bundle.strategy) {
-        // Legacy bundle format - not supported for Code Mode verification
+      // Validate bundle format
+      if (!bundle.snapshot?.code) {
         setResult({
           status: 'error',
-          error: 'Legacy bundle format detected. Please use a Code Mode artifact bundle.',
-        });
-        setIsVerifying(false);
-        return;
-      } else {
-        setResult({
-          status: 'error',
+          mode: 'static',
           error: 'Invalid bundle format. Expected Code Mode snapshot with code, seed, and vars.',
         });
         setIsVerifying(false);
         return;
       }
 
-      if (!expectedHash) {
-        setResult({
-          status: 'error',
-          error: 'Bundle missing expectedImageHash field.',
-        });
-        setIsVerifying(false);
-        return;
-      }
+      const snapshot: CanonicalSnapshot = bundle.snapshot;
+      const isLoop = isLoopMode(snapshot);
 
-      // Verify via Canonical Renderer
-      const verifyResult = await verifyCertified(snapshot, expectedHash);
+      let verifyResult: CanonicalVerifyResponse;
+
+      if (isLoop) {
+        // Loop mode: MUST use both hashes
+        const expectedPosterHash = bundle.expectedImageHash;
+        const expectedAnimationHash = bundle.expectedAnimationHash;
+
+        if (!expectedPosterHash || !expectedAnimationHash) {
+          setResult({
+            status: 'error',
+            mode: 'loop',
+            error: 'Loop verification requires both expectedImageHash (poster) and expectedAnimationHash. Cannot verify with only one hash.',
+          });
+          setIsVerifying(false);
+          return;
+        }
+
+        verifyResult = await verifyCertifiedLoop(snapshot, expectedPosterHash, expectedAnimationHash);
+      } else {
+        // Static mode: use single hash
+        const expectedHash = bundle.expectedImageHash || bundle.verification?.imageHash;
+
+        if (!expectedHash) {
+          setResult({
+            status: 'error',
+            mode: 'static',
+            error: 'Bundle missing expectedImageHash field.',
+          });
+          setIsVerifying(false);
+          return;
+        }
+
+        verifyResult = await verifyCertifiedStatic(snapshot, expectedHash);
+      }
 
       if (verifyResult.error) {
         setResult({
           status: 'error',
+          mode: verifyResult.mode,
           error: verifyResult.error,
         });
       } else if (verifyResult.verified && verifyResult.data) {
         setResult({
           status: 'verified',
+          mode: verifyResult.mode,
+          // Static fields
           originalHash: verifyResult.data.originalHash,
           computedHash: verifyResult.data.computedHash,
+          // Loop fields
+          posterVerified: verifyResult.data.posterVerified,
+          expectedPosterHash: verifyResult.data.expectedPosterHash,
+          computedPosterHash: verifyResult.data.computedPosterHash,
+          animationVerified: verifyResult.data.animationVerified,
+          expectedAnimationHash: verifyResult.data.expectedAnimationHash,
+          computedAnimationHash: verifyResult.data.computedAnimationHash,
+          hashMatchType: verifyResult.data.hashMatchType,
+          // Common
           matchDetails: verifyResult.data.matchDetails,
           rendererVersion: verifyResult.data.rendererVersion,
           nodeVersion: verifyResult.data.nodeVersion,
@@ -93,8 +131,16 @@ export function VerifyPanel() {
       } else if (verifyResult.data) {
         setResult({
           status: 'mismatch',
+          mode: verifyResult.mode,
           originalHash: verifyResult.data.originalHash,
           computedHash: verifyResult.data.computedHash,
+          posterVerified: verifyResult.data.posterVerified,
+          expectedPosterHash: verifyResult.data.expectedPosterHash,
+          computedPosterHash: verifyResult.data.computedPosterHash,
+          animationVerified: verifyResult.data.animationVerified,
+          expectedAnimationHash: verifyResult.data.expectedAnimationHash,
+          computedAnimationHash: verifyResult.data.computedAnimationHash,
+          hashMatchType: verifyResult.data.hashMatchType,
           matchDetails: verifyResult.data.matchDetails,
           rendererVersion: verifyResult.data.rendererVersion,
           nodeVersion: verifyResult.data.nodeVersion,
@@ -102,12 +148,14 @@ export function VerifyPanel() {
       } else {
         setResult({
           status: 'error',
+          mode: isLoop ? 'loop' : 'static',
           error: 'Unknown verification error',
         });
       }
     } catch (error) {
       setResult({
         status: 'error',
+        mode: 'static',
         error: error instanceof Error ? error.message : 'Failed to parse bundle JSON',
       });
     }
@@ -240,6 +288,88 @@ export function VerifyPanel() {
             )}
           </div>
 
+          {/* Mode Badge */}
+          <div className="mb-4">
+            <span className="text-xs font-mono px-2 py-1 rounded bg-muted">
+              mode: {result.mode}
+            </span>
+            {result.hashMatchType && (
+              <span className="text-xs font-mono px-2 py-1 rounded bg-muted ml-2">
+                hashMatchType: {result.hashMatchType}
+              </span>
+            )}
+          </div>
+
+          {/* Loop Mode Details */}
+          {result.mode === 'loop' && (
+            <div className="space-y-4 mb-4 p-4 rounded-md bg-card border border-border">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Info className="w-4 h-4" />
+                <span>Loop verification requires both poster + animation hashes.</span>
+              </div>
+              
+              {/* Poster Verification */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Poster</span>
+                  <span className={result.posterVerified ? 'text-verified' : 'text-destructive'}>
+                    {result.posterVerified ? (
+                      <span className="flex items-center gap-1">
+                        <CheckCircle2 className="w-4 h-4" /> Verified
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1">
+                        <AlertTriangle className="w-4 h-4" /> Failed
+                      </span>
+                    )}
+                  </span>
+                </div>
+                {result.expectedPosterHash && (
+                  <div>
+                    <span className="text-xs text-muted-foreground">Expected Poster Hash</span>
+                    <HashDisplay hash={result.expectedPosterHash} truncate={false} className="mt-1" />
+                  </div>
+                )}
+                {result.computedPosterHash && (
+                  <div>
+                    <span className="text-xs text-muted-foreground">Computed Poster Hash</span>
+                    <HashDisplay hash={result.computedPosterHash} truncate={false} className="mt-1" />
+                  </div>
+                )}
+              </div>
+
+              {/* Animation Verification */}
+              <div className="space-y-2 pt-3 border-t border-border">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Animation</span>
+                  <span className={result.animationVerified ? 'text-verified' : 'text-destructive'}>
+                    {result.animationVerified ? (
+                      <span className="flex items-center gap-1">
+                        <CheckCircle2 className="w-4 h-4" /> Verified
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1">
+                        <AlertTriangle className="w-4 h-4" /> Failed
+                      </span>
+                    )}
+                  </span>
+                </div>
+                {result.expectedAnimationHash && (
+                  <div>
+                    <span className="text-xs text-muted-foreground">Expected Animation Hash</span>
+                    <HashDisplay hash={result.expectedAnimationHash} truncate={false} className="mt-1" />
+                  </div>
+                )}
+                {result.computedAnimationHash && (
+                  <div>
+                    <span className="text-xs text-muted-foreground">Computed Animation Hash</span>
+                    <HashDisplay hash={result.computedAnimationHash} truncate={false} className="mt-1" />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {result.matchDetails && (
             <div className="space-y-3 mt-4 pt-4 border-t border-border">
               <h4 className="section-header">Verification Details</h4>
@@ -304,7 +434,8 @@ export function VerifyPanel() {
             </div>
           )}
 
-          {result.originalHash && result.computedHash && (
+          {/* Static mode hash display */}
+          {result.mode === 'static' && result.originalHash && result.computedHash && (
             <div className="space-y-2 mt-4 pt-4 border-t border-border">
               <div>
                 <span className="text-xs text-muted-foreground">Expected Hash</span>
@@ -314,11 +445,12 @@ export function VerifyPanel() {
                 <span className="text-xs text-muted-foreground">Computed Hash</span>
                 <HashDisplay hash={result.computedHash} truncate={false} className="mt-1" />
               </div>
-              {result.nodeVersion && (
-                <div className="mt-2 text-xs text-muted-foreground">
-                  Node: {result.nodeVersion}
-                </div>
-              )}
+            </div>
+          )}
+
+          {result.nodeVersion && (
+            <div className="mt-4 pt-4 border-t border-border text-xs text-muted-foreground">
+              Node: {result.nodeVersion}
             </div>
           )}
         </div>
@@ -334,6 +466,15 @@ export function VerifyPanel() {
           <li>Output image hash is computed and compared</li>
           <li>Any discrepancy = FAILED (no fallback)</li>
         </ol>
+        <div className="mt-3 pt-3 border-t border-border">
+          <div className="flex items-start gap-2 text-xs text-muted-foreground">
+            <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
+            <span>
+              <strong>Loop mode:</strong> Verification requires both poster + animation hashes.
+              Static mode requires only the image hash.
+            </span>
+          </div>
+        </div>
         <p className="text-xs text-muted-foreground mt-3 pt-3 border-t border-border">
           No authentication required. Anyone can verify any certified artifact.
           <br />
