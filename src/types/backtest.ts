@@ -10,6 +10,7 @@ export interface Strategy {
 export interface BacktestConfig {
   strategyId: string;
   dataset: string;
+  datasetHash?: string;
   startDate: string;
   endDate: string;
   seed: number;

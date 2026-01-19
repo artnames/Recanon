@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Play, RefreshCw } from "lucide-react";
 import { Button } from "./ui/button";
 import { ExecutionSteps } from "./ExecutionSteps";
@@ -6,6 +6,8 @@ import { StrategyCard } from "./StrategyCard";
 import { ExecutionModeToggle } from "./ExecutionModeToggle";
 import type { Strategy, ExecutionStep, BacktestConfig } from "@/types/backtest";
 import type { ExecutionMode } from "@/certified/engine";
+import type { Dataset } from "@/types/dataset";
+import { getAllDatasets } from "@/storage/datasets";
 
 interface BacktestExecutorProps {
   strategies: Strategy[];
@@ -14,28 +16,33 @@ interface BacktestExecutorProps {
   executionSteps: ExecutionStep[];
 }
 
-const DATASETS = [
-  { id: 'sp500-2020-2024', label: 'S&P 500 (2020-2024)', hash: 'sha256:a7c9e3f2d8b4a1e6c5f9d2b8a3e7f4c1d9b5a2e8f6c3d7b1a4e9f5c2d8b3a6e7' },
-  { id: 'nasdaq-2018-2024', label: 'NASDAQ 100 (2018-2024)', hash: 'sha256:f2b8c4d1e9a7f5c3d8b2a6e1f4c9d5b7a3e8f2c6d1b9a4e7f3c8d2b5a1e6f9c4' },
-  { id: 'btc-2019-2024', label: 'BTC/USD (2019-2024)', hash: 'sha256:c5d9a2e7f1b4c8d3a6e9f2b5c1d7a4e8f3b6c9d2a5e1f4b7c3d8a2e6f1b9c4d5' },
-];
-
 export function BacktestExecutor({ strategies, onExecute, isExecuting, executionSteps }: BacktestExecutorProps) {
+  const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null);
-  const [selectedDataset, setSelectedDataset] = useState<string>(DATASETS[0].id);
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
   const [seed, setSeed] = useState<number>(42);
   const [startDate, setStartDate] = useState('2020-01-01');
   const [endDate, setEndDate] = useState('2024-01-01');
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('draft');
 
-  const selectedDatasetInfo = DATASETS.find(d => d.id === selectedDataset);
+  // Load datasets from registry
+  useEffect(() => {
+    const loadedDatasets = getAllDatasets();
+    setDatasets(loadedDatasets);
+    if (loadedDatasets.length > 0 && !selectedDatasetId) {
+      setSelectedDatasetId(loadedDatasets[0].id);
+    }
+  }, []);
+
+  const selectedDataset = datasets.find(d => d.id === selectedDatasetId);
   const selectedStrategyInfo = strategies.find(s => s.id === selectedStrategy);
 
   const handleExecute = () => {
-    if (!selectedStrategy) return;
+    if (!selectedStrategy || !selectedDataset) return;
     onExecute({
       strategyId: selectedStrategy,
-      dataset: selectedDataset,
+      dataset: selectedDatasetId,
+      datasetHash: selectedDataset.hash,
       startDate,
       endDate,
       seed,
@@ -77,20 +84,26 @@ export function BacktestExecutor({ strategies, onExecute, isExecuting, execution
         <div>
           <h3 className="section-header">Dataset</h3>
           <div className="space-y-2">
-            {DATASETS.map((dataset) => (
-              <button
-                key={dataset.id}
-                onClick={() => setSelectedDataset(dataset.id)}
-                className={`w-full text-left p-3 rounded-md border transition-all ${
-                  selectedDataset === dataset.id
-                    ? "border-primary bg-primary/5"
-                    : "border-border bg-card hover:border-muted-foreground/30"
-                }`}
-              >
-                <div className="font-medium text-sm">{dataset.label}</div>
-                <div className="text-xs text-hash font-mono mt-1 truncate">{dataset.hash}</div>
-              </button>
-            ))}
+            {datasets.length === 0 ? (
+              <p className="text-sm text-muted-foreground p-3 rounded-md border border-border">
+                No datasets registered. Go to Datasets to register one.
+              </p>
+            ) : (
+              datasets.map((dataset) => (
+                <button
+                  key={dataset.id}
+                  onClick={() => setSelectedDatasetId(dataset.id)}
+                  className={`w-full text-left p-3 rounded-md border transition-all ${
+                    selectedDatasetId === dataset.id
+                      ? "border-primary bg-primary/5"
+                      : "border-border bg-card hover:border-muted-foreground/30"
+                  }`}
+                >
+                  <div className="font-medium text-sm">{dataset.name}</div>
+                  <div className="text-xs text-hash font-mono mt-1 truncate">{dataset.hash}</div>
+                </button>
+              ))
+            )}
           </div>
         </div>
 
@@ -146,7 +159,7 @@ export function BacktestExecutor({ strategies, onExecute, isExecuting, execution
           variant={executionMode === 'certified' ? 'execute' : 'secondary'}
           size="lg"
           className="w-full"
-          disabled={!selectedStrategy || isExecuting}
+          disabled={!selectedStrategy || !selectedDataset || isExecuting}
           onClick={handleExecute}
         >
           <Play className="w-4 h-4" />
@@ -159,12 +172,12 @@ export function BacktestExecutor({ strategies, onExecute, isExecuting, execution
         </Button>
 
         {/* Execution Summary for Certified Mode */}
-        {executionMode === 'certified' && selectedStrategy && selectedDatasetInfo && (
+        {executionMode === 'certified' && selectedStrategy && selectedDataset && (
           <div className="p-3 rounded-md bg-muted/50 border border-border text-xs space-y-1">
             <div className="font-medium text-muted-foreground">Execution Manifest Preview</div>
             <div className="font-mono space-y-0.5 text-muted-foreground">
               <div>Strategy: <span className="text-hash">{selectedStrategyInfo?.codeHash.slice(0, 24)}...</span></div>
-              <div>Dataset: <span className="text-hash">{selectedDatasetInfo.hash.slice(0, 24)}...</span></div>
+              <div>Dataset: <span className="text-hash">{selectedDataset.hash.slice(0, 24)}...</span></div>
               <div>Seed: <span className="text-hash">{seed}</span></div>
               <div>Range: <span className="text-hash">{startDate} → {endDate}</span></div>
             </div>
