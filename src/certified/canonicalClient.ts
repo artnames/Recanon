@@ -245,6 +245,13 @@ export async function renderCertified(
   const baseUrl = getCanonicalUrl();
   const url = `${baseUrl}/render`;
   
+  // Debug: Log what we're sending
+  console.log('[Canonical Client] Sending render request to:', url);
+  console.log('[Canonical Client] Snapshot code length:', snapshot.code?.length ?? 'undefined');
+  console.log('[Canonical Client] Snapshot seed:', snapshot.seed);
+  console.log('[Canonical Client] Snapshot vars:', snapshot.vars);
+  console.log('[Canonical Client] Full request body:', JSON.stringify({ snapshot }, null, 2).slice(0, 500) + '...');
+  
   try {
     const response = await fetch(url, {
       method: 'POST',
@@ -256,6 +263,7 @@ export async function renderCertified(
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error('[Canonical Client] Render error:', response.status, errorText);
       return {
         success: false,
         error: `Canonical Renderer error (${response.status}): ${errorText}`,
@@ -263,9 +271,11 @@ export async function renderCertified(
     }
 
     const result = await response.json();
+    console.log('[Canonical Client] Render success:', result.data?.artifactId);
     return result as CanonicalRenderResponse;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[Canonical Client] Network error:', message);
     return {
       success: false,
       error: `Failed to connect to Canonical Renderer at ${url}: ${message}`,
