@@ -5,7 +5,7 @@
  * Supports multiple claim types: Sports, P&L, and Generic statements.
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -44,7 +44,8 @@ import {
   DollarSign,
   FileText,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Sparkles
 } from 'lucide-react';
 import { 
   ClaimBundle, 
@@ -72,12 +73,15 @@ import {
 } from '@/certified/claimCodeTemplates';
 import { renderCertified } from '@/certified/canonicalClient';
 import { toast } from 'sonner';
+import { SPORTS_EXAMPLE, PNL_EXAMPLE } from '@/data/claimExamples';
 
 interface ClaimBuilderProps {
   className?: string;
+  prefillExample?: ClaimType | null;
+  onExampleConsumed?: () => void;
 }
 
-export function ClaimBuilder({ className }: ClaimBuilderProps) {
+export function ClaimBuilder({ className, prefillExample, onExampleConsumed }: ClaimBuilderProps) {
   // Step tracking
   const [currentStep, setCurrentStep] = useState(1);
   
@@ -109,6 +113,43 @@ export function ClaimBuilder({ className }: ClaimBuilderProps) {
     animationHash: string | null;
   } | null>(null);
   const [sealError, setSealError] = useState<string | null>(null);
+
+  // Handle prefill example from navigation
+  useEffect(() => {
+    if (prefillExample) {
+      loadExample(prefillExample);
+      if (onExampleConsumed) {
+        onExampleConsumed();
+      }
+    }
+  }, [prefillExample, onExampleConsumed]);
+
+  // Load example data
+  const loadExample = useCallback((type: ClaimType) => {
+    setSealResult(null);
+    setSealError(null);
+    setCurrentStep(3); // Jump to execution step after loading
+    
+    if (type === 'sports') {
+      setClaimType('sports');
+      setSportsDetails(SPORTS_EXAMPLE.details);
+      setSources(SPORTS_EXAMPLE.sources);
+      setSeed(SPORTS_EXAMPLE.seed);
+      setVars(SPORTS_EXAMPLE.vars);
+      toast.success('Sports example loaded', {
+        description: 'Click "Seal Claim" to generate your first bundle.',
+      });
+    } else if (type === 'pnl') {
+      setClaimType('pnl');
+      setPnlDetails(PNL_EXAMPLE.details);
+      setSources(PNL_EXAMPLE.sources);
+      setSeed(PNL_EXAMPLE.seed);
+      setVars(PNL_EXAMPLE.vars);
+      toast.success('P&L example loaded', {
+        description: 'Click "Seal Claim" to generate your first bundle.',
+      });
+    }
+  }, []);
 
   // Computed P&L metrics
   const pnlMetrics = useMemo(() => {
@@ -462,6 +503,43 @@ export function ClaimBuilder({ className }: ClaimBuilderProps) {
           <p className="text-xs text-muted-foreground mt-3">
             {getClaimTypeDescription(claimType)}
           </p>
+
+          {/* Load Example Buttons */}
+          <div className="mt-4 pt-4 border-t border-border">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium">Quick Start</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => loadExample('sports')}
+                className="gap-2"
+              >
+                <Trophy className="w-3.5 h-3.5" />
+                Load Sports Example
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => loadExample('pnl')}
+                className="gap-2"
+              >
+                <DollarSign className="w-3.5 h-3.5" />
+                Load P&L Example
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleReset}
+                className="gap-2 text-muted-foreground"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Reset
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

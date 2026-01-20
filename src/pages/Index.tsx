@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { StrategiesPanel } from "@/components/StrategiesPanel";
 import { BacktestExecutor } from "@/components/BacktestExecutor";
@@ -31,9 +31,28 @@ import {
   createExportBundle, 
   downloadBundle 
 } from "@/types/certifiedArtifact";
+import type { ClaimType } from "@/types/claimBundle";
+
+const STORAGE_KEY_VIEW = 'recanon_active_view';
+const STORAGE_KEY_CLAIM_EXAMPLE = 'recanon_claim_example';
 
 export default function Index() {
-  const [activeView, setActiveView] = useState("guide");
+  // Load saved view from localStorage, default to 'guide' for new users
+  const [activeView, setActiveView] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_VIEW);
+    return saved || 'guide';
+  });
+  
+  // Claim example to prefill (set when user clicks example CTA)
+  const [claimExample, setClaimExample] = useState<ClaimType | null>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_CLAIM_EXAMPLE);
+    if (saved) {
+      localStorage.removeItem(STORAGE_KEY_CLAIM_EXAMPLE); // Clear after reading
+      return saved as ClaimType;
+    }
+    return null;
+  });
+  
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionSteps, setExecutionSteps] = useState<ExecutionStep[]>([]);
   const [selectedArtifact, setSelectedArtifact] = useState<ArtifactType | null>(null);
@@ -44,6 +63,24 @@ export default function Index() {
   const [draftResult, setDraftResult] = useState<DraftExecutionResult | null>(null);
   const [lastConfig, setLastConfig] = useState<BacktestConfig | null>(null);
   const [executionError, setExecutionError] = useState<string | null>(null);
+
+  // Persist active view to localStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_VIEW, activeView);
+  }, [activeView]);
+
+  // Handle navigation with optional claim example prefill
+  const handleViewChange = useCallback((view: string, example?: ClaimType) => {
+    if (example) {
+      setClaimExample(example);
+    }
+    setActiveView(view);
+  }, []);
+
+  // Clear claim example after it's consumed
+  const clearClaimExample = useCallback(() => {
+    setClaimExample(null);
+  }, []);
 
   const handleExecute = useCallback(async (config: BacktestConfig, mode: ExecutionMode) => {
     setIsExecuting(true);
@@ -285,10 +322,15 @@ export default function Index() {
         );
       
       case 'guide':
-        return <HowItWorksPanel />;
+        return <HowItWorksPanel onNavigate={handleViewChange} />;
       
       case 'claim':
-        return <ClaimBuilder />;
+        return (
+          <ClaimBuilder 
+            prefillExample={claimExample} 
+            onExampleConsumed={clearClaimExample}
+          />
+        );
       
       case 'verify':
         return <VerifyPanel />;
@@ -306,7 +348,7 @@ export default function Index() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar activeView={activeView} onViewChange={setActiveView} />
+      <Sidebar activeView={activeView} onViewChange={handleViewChange} />
       <main className="flex-1 p-6 overflow-auto">
         <div className="max-w-6xl mx-auto">
           {renderContent()}
