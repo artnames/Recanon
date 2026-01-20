@@ -1332,20 +1332,6 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
                   lastPayloadFingerprint={lastPayloadFingerprint}
                 />
 
-                  <div className="space-y-2">
-                    <Label>Mode</Label>
-                    <div className="flex items-center gap-3 mt-1">
-                      <Switch
-                        checked={isLoopMode}
-                        onCheckedChange={setIsLoopMode}
-                      />
-                      <span className="text-sm">
-                        {isLoopMode ? 'Loop (60 frames, MP4)' : 'Static (PNG)'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Snapshot Debug Panel */}
                 <Collapsible>
                   <CollapsibleTrigger asChild>
