@@ -15,7 +15,9 @@ import {
   Stamp,
   LogIn,
   Mail,
-  Lock
+  Lock,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,6 +32,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -37,9 +44,10 @@ interface SealedResultCardProps {
   posterHash: string;
   animationHash: string | null;
   isLoop: boolean;
-  saveStatus: 'idle' | 'saving' | 'saved' | 'error' | 'auth_required';
+  saveStatus: 'idle' | 'saving' | 'saved' | 'error' | 'auth_required' | 'validation_error';
   savedClaimId: string | null;
   saveError: string | null;
+  saveErrorDetails?: string | null;
   onOpenInLibrary: () => void;
   onDownloadBundle: () => void;
   onCheckNow: () => void;
@@ -53,6 +61,7 @@ export function SealedResultCard({
   saveStatus,
   savedClaimId,
   saveError,
+  saveErrorDetails,
   onOpenInLibrary,
   onDownloadBundle,
   onCheckNow,
@@ -64,6 +73,7 @@ export function SealedResultCard({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const handleCopyHash = async (hash: string, label: string) => {
     try {
@@ -318,6 +328,42 @@ export function SealedResultCard({
                 </Button>
               )}
             </>
+          )}
+          {saveStatus === 'validation_error' && (
+            <div className="w-full">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />
+                <span className="text-sm text-destructive font-medium">{saveError || 'Validation failed'}</span>
+              </div>
+              {saveErrorDetails && (
+                <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen} className="mt-2">
+                  <CollapsibleTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+                    >
+                      {detailsOpen ? (
+                        <>
+                          <ChevronUp className="w-3 h-3" />
+                          Hide details
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="w-3 h-3" />
+                          Show details
+                        </>
+                      )}
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="mt-2 p-2 bg-muted rounded text-xs font-mono text-muted-foreground break-all">
+                      {saveErrorDetails}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+            </div>
           )}
           {saveStatus === 'idle' && (
             <span className="text-sm text-muted-foreground">Ready to save</span>
