@@ -9,6 +9,7 @@ import { DatasetsPage } from "@/components/DatasetsPage";
 import { SettingsPage } from "@/components/SettingsPage";
 import { HowItWorksPanel } from "@/components/HowItWorksPanel";
 import { ClaimBuilder } from "@/components/ClaimBuilder";
+import { LibraryView } from "@/components/LibraryView";
 import { DraftResultBanner } from "@/components/DraftResultBanner";
 import { MetricCard } from "@/components/MetricCard";
 import { EquityChart } from "@/components/EquityChart";
@@ -36,9 +37,24 @@ import type { ClaimType } from "@/types/claimBundle";
 const STORAGE_KEY_VIEW = 'recanon_active_view';
 const STORAGE_KEY_CLAIM_EXAMPLE = 'recanon_claim_example';
 
+// Parse deep link params from URL
+function parseDeepLink(): { claimId?: string; hash?: string } {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    claimId: params.get('claim') || undefined,
+    hash: params.get('hash') || undefined,
+  };
+}
+
 export default function Index() {
+  // Deep link state
+  const [deepLink, setDeepLink] = useState<{ claimId?: string; hash?: string }>(() => parseDeepLink());
+  
   // Load saved view from localStorage, default to 'guide' for new users
+  // But if deep link exists, go to library
   const [activeView, setActiveView] = useState(() => {
+    const dl = parseDeepLink();
+    if (dl.claimId || dl.hash) return 'library';
     const saved = localStorage.getItem(STORAGE_KEY_VIEW);
     return saved || 'guide';
   });
@@ -69,10 +85,22 @@ export default function Index() {
     localStorage.setItem(STORAGE_KEY_VIEW, activeView);
   }, [activeView]);
 
+  // Clear deep link params from URL after initial load (to avoid re-triggering)
+  useEffect(() => {
+    if (deepLink.claimId || deepLink.hash) {
+      // Replace URL without query params
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [deepLink]);
+
   // Handle navigation with optional claim example prefill
   const handleViewChange = useCallback((view: string, example?: ClaimType) => {
     if (example) {
       setClaimExample(example);
+    }
+    // Clear deep link when navigating away from library
+    if (view !== 'library') {
+      setDeepLink({});
     }
     setActiveView(view);
   }, []);
@@ -329,6 +357,15 @@ export default function Index() {
           <ClaimBuilder 
             prefillExample={claimExample} 
             onExampleConsumed={clearClaimExample}
+          />
+        );
+      
+      case 'library':
+        return (
+          <LibraryView 
+            initialClaimId={deepLink.claimId}
+            initialHash={deepLink.hash}
+            onNavigateToCreate={() => handleViewChange('claim')}
           />
         );
       

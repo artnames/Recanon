@@ -14,7 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      sealed_claims: {
+        Row: {
+          animation_hash: string | null
+          bundle_json: Json
+          bundle_version: string
+          claim_type: string | null
+          created_at: string
+          event_date: string | null
+          id: string
+          keywords: string | null
+          mode: string
+          poster_hash: string
+          sources: Json | null
+          statement: string | null
+          subject: string | null
+          title: string | null
+        }
+        Insert: {
+          animation_hash?: string | null
+          bundle_json: Json
+          bundle_version: string
+          claim_type?: string | null
+          created_at?: string
+          event_date?: string | null
+          id?: string
+          keywords?: string | null
+          mode: string
+          poster_hash: string
+          sources?: Json | null
+          statement?: string | null
+          subject?: string | null
+          title?: string | null
+        }
+        Update: {
+          animation_hash?: string | null
+          bundle_json?: Json
+          bundle_version?: string
+          claim_type?: string | null
+          created_at?: string
+          event_date?: string | null
+          id?: string
+          keywords?: string | null
+          mode?: string
+          poster_hash?: string
+          sources?: Json | null
+          statement?: string | null
+          subject?: string | null
+          title?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

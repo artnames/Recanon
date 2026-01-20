@@ -317,6 +317,11 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed }: C
     setVars(updated);
   };
 
+  // Save state for library
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [savedClaimId, setSavedClaimId] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   // Seal the claim
   const handleSeal = useCallback(async () => {
     if (!canSeal) return;
@@ -324,6 +329,8 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed }: C
     setIsSealing(true);
     setSealError(null);
     setSealResult(null);
+    setSaveStatus('idle');
+    setSavedClaimId(null);
 
     try {
       const snapshot = {
@@ -341,27 +348,55 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed }: C
 
       const result = response.data;
       
+      let sealedResult: { posterHash: string; animationHash: string | null };
+      
       if (isLoopMode) {
         if (!result.posterHash || !result.animationHash) {
           throw new Error('Loop mode requires both poster and animation hashes');
         }
-        setSealResult({
+        sealedResult = {
           posterHash: result.posterHash,
           animationHash: result.animationHash,
-        });
+        };
       } else {
         if (!result.posterHash) {
           throw new Error('Renderer did not return a poster hash');
         }
-        setSealResult({
+        sealedResult = {
           posterHash: result.posterHash,
           animationHash: null,
-        });
+        };
       }
+      
+      setSealResult(sealedResult);
+      toast.success('Claim sealed successfully!');
 
-      toast.success('Claim sealed successfully!', {
-        description: 'Your claim has been cryptographically sealed.',
-      });
+      // Now save to library
+      setSaveStatus('saving');
+      try {
+        const { saveSealedClaim, normalizeSha256 } = await import('@/api/claims');
+        const bundleToSave: ClaimBundle = {
+          ...bundle,
+          createdAt: new Date().toISOString(),
+          baseline: {
+            posterHash: normalizeSha256(sealedResult.posterHash),
+            animationHash: sealedResult.animationHash ? normalizeSha256(sealedResult.animationHash) : null,
+          },
+          check: {
+            lastCheckedAt: new Date().toISOString(),
+            result: 'SEALED',
+          },
+        };
+        const saved = await saveSealedClaim(bundleToSave);
+        setSavedClaimId(saved.id);
+        setSaveStatus('saved');
+        toast.success('Saved to Library');
+      } catch (saveErr) {
+        const msg = saveErr instanceof Error ? saveErr.message : 'Failed to save';
+        setSaveError(msg);
+        setSaveStatus('error');
+        console.error('Failed to save to library:', saveErr);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       setSealError(message);
@@ -371,7 +406,7 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed }: C
     } finally {
       setIsSealing(false);
     }
-  }, [canSeal, generatedCode, seed, vars, isLoopMode]);
+  }, [canSeal, generatedCode, seed, vars, isLoopMode, bundle]);
 
   // Download JSON
   const handleDownload = () => {
