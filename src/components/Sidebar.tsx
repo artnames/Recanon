@@ -5,7 +5,8 @@ import {
   RotateCcw, 
   Settings,
   Database,
-  BookOpen
+  BookOpen,
+  Stamp
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import recanonIcon from "@/assets/recanon-icon.png";
@@ -17,10 +18,11 @@ interface SidebarProps {
 
 const navItems = [
   { id: 'guide', label: 'Start Here', icon: BookOpen },
+  { id: 'claim', label: 'Create Claim', icon: Stamp },
+  { id: 'verify', label: 'Check & Test', icon: RotateCcw },
   { id: 'strategies', label: 'Strategies', icon: FileCode },
   { id: 'execute', label: 'Execute', icon: Play },
   { id: 'artifacts', label: 'Sealed Results', icon: ShieldCheck },
-  { id: 'verify', label: 'Check & Test', icon: RotateCcw },
 ];
 
 const bottomItems = [
