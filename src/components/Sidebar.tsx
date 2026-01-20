@@ -6,7 +6,8 @@ import {
   Settings,
   Database,
   BookOpen,
-  Stamp
+  Stamp,
+  Library
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import recanonIcon from "@/assets/recanon-icon.png";
@@ -19,6 +20,7 @@ interface SidebarProps {
 const navItems = [
   { id: 'guide', label: 'Start Here', icon: BookOpen },
   { id: 'claim', label: 'Create Claim', icon: Stamp },
+  { id: 'library', label: 'Library', icon: Library },
   { id: 'verify', label: 'Check & Test', icon: RotateCcw },
   { id: 'strategies', label: 'Strategies', icon: FileCode },
   { id: 'execute', label: 'Execute', icon: Play },
