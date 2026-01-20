@@ -18,6 +18,7 @@ interface BundleValidatorProps {
 
 // Example static bundle that works without network (for instant loading)
 // NOTE: Canvas is provided by Canonical Renderer - do NOT call createCanvas()
+// Seed is provided via snapshot.seed - random() is seeded automatically
 export const EXAMPLE_STATIC_BUNDLE = {
   runtime: "nexart-canonical-renderer",
   artifactId: "example-static-001",
@@ -25,6 +26,7 @@ export const EXAMPLE_STATIC_BUNDLE = {
     code: `
 // Deterministic Static Proof Program
 // Canvas: 1950x2400 (provided by runtime)
+// Seed is provided via snapshot.seed - random() is seeded automatically
 function setup() {
   // Canvas is provided by the Canonical Renderer
   noLoop();
@@ -32,7 +34,6 @@ function setup() {
 
 function draw() {
   background(20, 24, 30);
-  randomSeed(SEED);
   
   const cols = 8;
   const rows = 6;
