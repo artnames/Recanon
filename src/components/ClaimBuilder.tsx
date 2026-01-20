@@ -197,19 +197,19 @@ export function ClaimBuilder({ className }: ClaimBuilderProps) {
       const result = response.data;
       
       if (isLoopMode) {
-        if (!result.imageHash || !result.animationHash) {
+        if (!result.posterHash || !result.animationHash) {
           throw new Error('Loop mode requires both poster and animation hashes');
         }
         setSealResult({
-          posterHash: result.imageHash,
+          posterHash: result.posterHash,
           animationHash: result.animationHash,
         });
       } else {
-        if (!result.imageHash) {
-          throw new Error('Renderer did not return an image hash');
+        if (!result.posterHash) {
+          throw new Error('Renderer did not return a poster hash');
         }
         setSealResult({
-          posterHash: result.imageHash,
+          posterHash: result.posterHash,
           animationHash: null,
         });
       }

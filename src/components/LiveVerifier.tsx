@@ -194,8 +194,8 @@ export function LiveVerifier() {
         
         // For loop mode, we need BOTH hashes
         if (isLoopMode) {
-          if (data.imageHash && data.animationHash) {
-            setExpectedHash(data.imageHash);
+          if (data.posterHash && data.animationHash) {
+            setExpectedHash(data.posterHash);
             setExpectedAnimationHash(data.animationHash);
             toast({
               title: "Baseline sealed",
@@ -214,8 +214,8 @@ export function LiveVerifier() {
             return;
           }
         } else {
-          // Static mode - just need imageHash
-          setExpectedHash(data.imageHash);
+          // Static mode - just need posterHash
+          setExpectedHash(data.posterHash);
           setExpectedAnimationHash(null);
           toast({
             title: "Baseline sealed",

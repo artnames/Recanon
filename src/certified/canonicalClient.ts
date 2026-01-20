@@ -68,11 +68,14 @@ export interface CanonicalMetadata {
   deterministic?: boolean;
 }
 
+// ============================================================
+// RAW RESPONSE TYPES (from upstream renderer - flat or wrapped)
+// ============================================================
+
 /**
- * Raw response from POST /render endpoint (static mode)
- * The renderer returns flat JSON, not wrapped in {success, data}
+ * Raw flat response from POST /render endpoint (static mode)
  */
-export interface RawRenderResponseStatic {
+interface RawRenderResponseStaticFlat {
   type: 'static';
   mime: 'image/png';
   imageHash: string;
@@ -81,10 +84,9 @@ export interface RawRenderResponseStatic {
 }
 
 /**
- * Raw response from POST /render endpoint (loop mode)
- * The renderer returns flat JSON, not wrapped in {success, data}
+ * Raw flat response from POST /render endpoint (loop mode)
  */
-export interface RawRenderResponseLoop {
+interface RawRenderResponseLoopFlat {
   type: 'animation';
   mime: 'video/mp4';
   animationHash: string;
@@ -101,51 +103,23 @@ export interface RawRenderResponseLoop {
 }
 
 /**
- * Union type for raw render responses
+ * Union type for raw flat render responses
  */
-export type RawRenderResponse = RawRenderResponseStatic | RawRenderResponseLoop;
+type RawRenderResponseFlat = RawRenderResponseStaticFlat | RawRenderResponseLoopFlat;
 
 /**
- * Normalized response from renderCertified()
- * Provides consistent interface regardless of static/loop mode
+ * Wrapped response format (legacy or some upstream versions)
  */
-export interface NormalizedRenderResult {
-  mode: 'static' | 'loop';
-  /** SHA-256 hash of static PNG or poster PNG */
-  imageHash: string;
-  /** Base64 encoded PNG (static image or poster frame) */
-  outputBase64: string;
-  /** MIME type of primary output */
-  mime: 'image/png' | 'video/mp4';
-  /** Animation hash (loop mode only) */
-  animationHash?: string;
-  /** Base64 encoded MP4 (loop mode only) */
-  animationBase64?: string;
-  /** Frame count (loop mode only) */
-  frames?: number;
-  /** FPS (loop mode only) */
-  fps?: number;
-  /** Canvas dimensions (loop mode only) */
-  width?: number;
-  height?: number;
-  /** Node metadata */
-  metadata: CanonicalMetadata;
-}
-
-/**
- * Response wrapper from renderCertified()
- * Either success with data or error with message
- */
-export interface CanonicalRenderResponse {
+interface WrappedResponse<T> {
   success: boolean;
+  data?: T;
   error?: string;
-  data?: NormalizedRenderResult;
 }
 
 /**
- * Raw response from POST /verify endpoint (static mode)
+ * Raw verify response (static mode) - flat
  */
-export interface RawVerifyResponseStatic {
+interface RawVerifyResponseStaticFlat {
   verified: boolean;
   computedHash: string;
   expectedHash: string;
@@ -154,9 +128,9 @@ export interface RawVerifyResponseStatic {
 }
 
 /**
- * Raw response from POST /verify endpoint (loop mode)
+ * Raw verify response (loop mode) - flat
  */
-export interface RawVerifyResponseLoop {
+interface RawVerifyResponseLoopFlat {
   mode: 'loop';
   verified: boolean;
   posterVerified: boolean;
@@ -167,6 +141,54 @@ export interface RawVerifyResponseLoop {
   expectedAnimationHash: string;
   hashMatchType?: 'exact' | 'partial' | 'none';
   metadata?: CanonicalMetadata;
+}
+
+// ============================================================
+// NORMALIZED RESPONSE TYPES (what the UI always sees)
+// ============================================================
+
+/**
+ * Normalized render result - stable interface for all consumers
+ * UI components use ONLY these fields, never raw response fields
+ */
+export interface NormalizedRenderResult {
+  /** Execution mode */
+  mode: 'static' | 'loop';
+  /** SHA-256 hash of poster/static image */
+  posterHash: string;
+  /** Base64 encoded PNG (static image or poster frame) */
+  posterBase64: string;
+  /** Animation hash (loop mode only, null for static) */
+  animationHash: string | null;
+  /** Base64 encoded MP4 (loop mode only, null for static) */
+  animationBase64: string | null;
+  /** MIME type of primary output */
+  mime: 'image/png' | 'video/mp4';
+  /** Node metadata */
+  metadata: CanonicalMetadata;
+  /** Frame count (loop mode only) */
+  frames?: number;
+  /** FPS (loop mode only) */
+  fps?: number;
+  /** Canvas dimensions */
+  width?: number;
+  height?: number;
+  
+  // Legacy compatibility aliases
+  /** @deprecated Use posterHash instead */
+  imageHash: string;
+  /** @deprecated Use posterBase64 instead */
+  outputBase64: string;
+}
+
+/**
+ * Response wrapper from renderCertified()
+ * Either success with data or error with message
+ */
+export interface CanonicalRenderResponse {
+  success: boolean;
+  error?: string;
+  data?: NormalizedRenderResult;
 }
 
 /**
@@ -210,6 +232,201 @@ export interface LegacyCanonicalSnapshot {
   startDate: string;
   endDate: string;
   parameters: Record<string, unknown>;
+}
+
+// ============================================================
+// RESPONSE NORMALIZATION LAYER
+// ============================================================
+
+/**
+ * Detects if response is wrapped format (has success/data structure)
+ */
+function isWrappedResponse<T>(raw: unknown): raw is WrappedResponse<T> {
+  return (
+    typeof raw === 'object' && 
+    raw !== null && 
+    'success' in raw &&
+    typeof (raw as WrappedResponse<T>).success === 'boolean'
+  );
+}
+
+/**
+ * Unwraps response if wrapped, otherwise returns as-is
+ */
+function unwrapResponse<T>(raw: unknown): T {
+  if (isWrappedResponse<T>(raw)) {
+    if (!raw.success) {
+      throw new Error(raw.error || 'Upstream returned success: false');
+    }
+    if (!raw.data) {
+      throw new Error('Upstream returned success: true but no data');
+    }
+    return raw.data;
+  }
+  return raw as T;
+}
+
+/**
+ * Normalizes raw render response (flat or wrapped) to stable interface
+ */
+export function normalizeRenderResponse(raw: unknown): NormalizedRenderResult {
+  const data = unwrapResponse<RawRenderResponseFlat>(raw);
+  
+  if (data.type === 'animation') {
+    // Loop mode: use posterHash as the canonical poster hash
+    return {
+      mode: 'loop',
+      posterHash: data.posterHash,
+      posterBase64: data.posterBase64,
+      animationHash: data.animationHash,
+      animationBase64: data.animationBase64,
+      mime: 'video/mp4',
+      metadata: data.metadata,
+      frames: data.frames,
+      fps: data.fps,
+      width: data.width,
+      height: data.height,
+      // Legacy aliases
+      imageHash: data.posterHash,
+      outputBase64: data.posterBase64,
+    };
+  } else {
+    // Static mode
+    return {
+      mode: 'static',
+      posterHash: data.imageHash,
+      posterBase64: data.imageBase64,
+      animationHash: null,
+      animationBase64: null,
+      mime: 'image/png',
+      metadata: data.metadata,
+      // Legacy aliases
+      imageHash: data.imageHash,
+      outputBase64: data.imageBase64,
+    };
+  }
+}
+
+/**
+ * Normalizes raw verify response (flat or wrapped) to stable interface
+ */
+export function normalizeVerifyResponse(raw: unknown, isLoop: boolean): CanonicalVerifyResponse {
+  const data = unwrapResponse<RawVerifyResponseStaticFlat | RawVerifyResponseLoopFlat>(raw);
+  
+  // Detect loop mode from response or from caller hint
+  const responseIsLoop = 'mode' in data && data.mode === 'loop';
+  const actuallyLoop = responseIsLoop || isLoop;
+  
+  if (actuallyLoop && 'posterVerified' in data) {
+    const loopData = data as RawVerifyResponseLoopFlat;
+    return {
+      mode: 'loop',
+      verified: loopData.verified,
+      posterVerified: loopData.posterVerified,
+      animationVerified: loopData.animationVerified,
+      expectedPosterHash: loopData.expectedPosterHash,
+      computedPosterHash: loopData.computedPosterHash,
+      expectedAnimationHash: loopData.expectedAnimationHash,
+      computedAnimationHash: loopData.computedAnimationHash,
+      hashMatchType: loopData.hashMatchType,
+      metadata: loopData.metadata,
+    };
+  } else {
+    const staticData = data as RawVerifyResponseStaticFlat;
+    return {
+      mode: 'static',
+      verified: staticData.verified,
+      expectedHash: staticData.expectedHash,
+      computedHash: staticData.computedHash,
+      protocolCompliant: staticData.protocolCompliant,
+      metadata: staticData.metadata,
+    };
+  }
+}
+
+// ============================================================
+// ERROR HANDLING WITH HINTS
+// ============================================================
+
+/**
+ * Creates a descriptive error with status code, body, and action hint
+ */
+export class CanonicalError extends Error {
+  public readonly statusCode: number;
+  public readonly rawBody: string;
+  public readonly hint: string;
+
+  constructor(statusCode: number, rawBody: string, hint: string) {
+    const message = `Proxy error (${statusCode}): ${rawBody.substring(0, 200)}`;
+    super(message);
+    this.name = 'CanonicalError';
+    this.statusCode = statusCode;
+    this.rawBody = rawBody;
+    this.hint = hint;
+  }
+}
+
+/**
+ * Determines the appropriate hint based on error details
+ */
+function getErrorHint(status: number, body: string): string {
+  const bodyLower = body.toLowerCase();
+  
+  // Rate limiting
+  if (status === 429) {
+    return 'Rate limit exceeded. Wait a moment and try again.';
+  }
+  
+  // CORS issues
+  if (bodyLower.includes('cors') || bodyLower.includes('origin')) {
+    return 'CORS error. Ensure the proxy is correctly configured.';
+  }
+  
+  // Invalid code
+  if (bodyLower.includes('invalid_code') || bodyLower.includes('code must be')) {
+    return 'Snapshot code is invalid. Ensure code is a non-empty string.';
+  }
+  
+  // Canvas violation
+  if (bodyLower.includes('createcanvas') || bodyLower.includes('canvas')) {
+    return 'Canvas is fixed at 1950×2400. Remove createCanvas() from your code.';
+  }
+  
+  // Loop mode issues
+  if (bodyLower.includes('loop') || bodyLower.includes('animation') || bodyLower.includes('frames')) {
+    return 'Loop mode error. Ensure execution.frames ≥ 2 and execution.loop = true.';
+  }
+  
+  // Proxy/network issues
+  if (status === 502 || status === 503 || status === 504) {
+    return 'Canonical renderer is unreachable. Check network or try again later.';
+  }
+  
+  // Auth/forbidden
+  if (status === 401 || status === 403) {
+    return 'Authentication error. Check API credentials.';
+  }
+  
+  // Generic client error
+  if (status >= 400 && status < 500) {
+    return 'Invalid request. Check your snapshot parameters.';
+  }
+  
+  // Generic server error
+  if (status >= 500) {
+    return 'Server error. Try again or contact support.';
+  }
+  
+  return 'Unknown error. Check console for details.';
+}
+
+/**
+ * Handles non-2xx responses by throwing CanonicalError
+ */
+async function handleErrorResponse(response: Response): Promise<never> {
+  const bodyText = await response.text();
+  const hint = getErrorHint(response.status, bodyText);
+  throw new CanonicalError(response.status, bodyText, hint);
 }
 
 // ============================================================
@@ -305,7 +522,8 @@ export function getCanonicalRendererInfo(): {
  * 
  * POST /render
  * 
- * Returns normalized result with consistent fields for static/loop modes
+ * Returns normalized result with consistent fields for static/loop modes.
+ * Handles both flat and wrapped upstream responses.
  */
 export async function renderCertified(
   snapshot: CanonicalSnapshot
@@ -329,73 +547,42 @@ export async function renderCertified(
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[Canonical Client] Render error:', response.status, errorText);
-      
-      // Handle rate limiting
-      if (response.status === 429) {
-        try {
-          const errorData = JSON.parse(errorText);
+      try {
+        await handleErrorResponse(response);
+      } catch (err) {
+        if (err instanceof CanonicalError) {
+          console.error('[Canonical Client] Render error:', err.statusCode, err.rawBody);
           return {
             success: false,
-            error: errorData.message || 'Rate limit exceeded. Please wait before retrying.',
-          };
-        } catch {
-          return {
-            success: false,
-            error: 'Rate limit exceeded. Please wait before retrying.',
+            error: `${err.message}\n\nNext step: ${err.hint}`,
           };
         }
+        throw err;
       }
-      
-      return {
-        success: false,
-        error: `Proxy error (${response.status}): ${errorText}`,
-      };
     }
 
-    // Parse flat response from renderer
-    const raw = await response.json() as RawRenderResponse;
-    console.log('[Canonical Client] Render success, type:', raw.type);
+    // Parse response (handles both flat and wrapped formats)
+    const raw = await response.json();
+    console.log('[Canonical Client] Render success, raw type:', raw.type || (raw.data?.type) || 'unknown');
     
     // Normalize to consistent interface
-    if (raw.type === 'animation') {
-      // Loop mode: use posterHash as imageHash (canonical poster hash)
-      return {
-        success: true,
-        data: {
-          mode: 'loop',
-          imageHash: raw.posterHash, // Use posterHash as the canonical poster hash
-          outputBase64: raw.posterBase64,
-          mime: 'image/png', // Poster is always PNG
-          animationHash: raw.animationHash,
-          animationBase64: raw.animationBase64,
-          frames: raw.frames,
-          fps: raw.fps,
-          width: raw.width,
-          height: raw.height,
-          metadata: raw.metadata,
-        },
-      };
-    } else {
-      // Static mode
-      return {
-        success: true,
-        data: {
-          mode: 'static',
-          imageHash: raw.imageHash,
-          outputBase64: raw.imageBase64,
-          mime: 'image/png',
-          metadata: raw.metadata,
-        },
-      };
-    }
+    const normalized = normalizeRenderResponse(raw);
+    
+    return {
+      success: true,
+      data: normalized,
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('[Canonical Client] Network error:', message);
+    
+    const hint = error instanceof CanonicalError 
+      ? error.hint 
+      : 'Check network connection and proxy configuration.';
+    
     return {
       success: false,
-      error: `Failed to connect to proxy: ${message}`,
+      error: `Failed to connect to proxy: ${message}\n\nNext step: ${hint}`,
     };
   }
 }
@@ -405,7 +592,7 @@ export async function renderCertified(
  * 
  * POST /verify
  * Request: { snapshot, expectedHash }
- * Response: { verified, computedHash, expectedHash, protocolCompliant, metadata }
+ * Response: normalized CanonicalVerifyResponse
  */
 export async function verifyCertifiedStatic(
   snapshot: CanonicalSnapshot,
@@ -424,50 +611,33 @@ export async function verifyCertifiedStatic(
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      
-      // Handle rate limiting
-      if (response.status === 429) {
-        try {
-          const errorData = JSON.parse(errorText);
+      try {
+        await handleErrorResponse(response);
+      } catch (err) {
+        if (err instanceof CanonicalError) {
           return {
             mode: 'static',
             verified: false,
-            error: errorData.message || 'Rate limit exceeded. Please wait before retrying.',
-          };
-        } catch {
-          return {
-            mode: 'static',
-            verified: false,
-            error: 'Rate limit exceeded. Please wait before retrying.',
+            error: `${err.message}\n\nNext step: ${err.hint}`,
           };
         }
+        throw err;
       }
-      
-      return {
-        mode: 'static',
-        verified: false,
-        error: `Proxy error (${response.status}): ${errorText}`,
-      };
     }
 
-    // Parse flat response
-    const raw = await response.json() as RawVerifyResponseStatic;
+    // Parse and normalize response
+    const raw = await response.json();
+    return normalizeVerifyResponse(raw, false);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    const hint = error instanceof CanonicalError 
+      ? error.hint 
+      : 'Check network connection.';
     
     return {
       mode: 'static',
-      verified: raw.verified,
-      expectedHash: raw.expectedHash,
-      computedHash: raw.computedHash,
-      protocolCompliant: raw.protocolCompliant,
-      metadata: raw.metadata,
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return {
-      mode: 'static',
       verified: false,
-      error: `Failed to connect to proxy: ${message}`,
+      error: `Failed to connect to proxy: ${message}\n\nNext step: ${hint}`,
     };
   }
 }
@@ -480,8 +650,7 @@ export async function verifyCertifiedStatic(
  * 
  * POST /verify
  * Request: { snapshot, expectedPosterHash, expectedAnimationHash }
- * Response: { mode, verified, posterVerified, animationVerified, computedPosterHash, 
- *             computedAnimationHash, expectedPosterHash, expectedAnimationHash, hashMatchType, metadata }
+ * Response: normalized CanonicalVerifyResponse
  */
 export async function verifyCertifiedLoop(
   snapshot: CanonicalSnapshot,
@@ -505,54 +674,33 @@ export async function verifyCertifiedLoop(
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      
-      // Handle rate limiting
-      if (response.status === 429) {
-        try {
-          const errorData = JSON.parse(errorText);
+      try {
+        await handleErrorResponse(response);
+      } catch (err) {
+        if (err instanceof CanonicalError) {
           return {
             mode: 'loop',
             verified: false,
-            error: errorData.message || 'Rate limit exceeded. Please wait before retrying.',
-          };
-        } catch {
-          return {
-            mode: 'loop',
-            verified: false,
-            error: 'Rate limit exceeded. Please wait before retrying.',
+            error: `${err.message}\n\nNext step: ${err.hint}`,
           };
         }
+        throw err;
       }
-      
-      return {
-        mode: 'loop',
-        verified: false,
-        error: `Proxy error (${response.status}): ${errorText}`,
-      };
     }
 
-    // Parse flat response
-    const raw = await response.json() as RawVerifyResponseLoop;
+    // Parse and normalize response
+    const raw = await response.json();
+    return normalizeVerifyResponse(raw, true);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    const hint = error instanceof CanonicalError 
+      ? error.hint 
+      : 'Check network connection.';
     
     return {
       mode: 'loop',
-      verified: raw.verified,
-      posterVerified: raw.posterVerified,
-      animationVerified: raw.animationVerified,
-      expectedPosterHash: raw.expectedPosterHash,
-      computedPosterHash: raw.computedPosterHash,
-      expectedAnimationHash: raw.expectedAnimationHash,
-      computedAnimationHash: raw.computedAnimationHash,
-      hashMatchType: raw.hashMatchType,
-      metadata: raw.metadata,
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return {
-      mode: 'loop',
       verified: false,
-      error: `Failed to connect to proxy: ${message}`,
+      error: `Failed to connect to proxy: ${message}\n\nNext step: ${hint}`,
     };
   }
 }
