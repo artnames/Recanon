@@ -163,21 +163,65 @@ export function LiveVerifier() {
     setResult(null);
 
     try {
-      const snapshot: CanonicalSnapshot = JSON.parse(snapshotJson);
+      let snapshot: CanonicalSnapshot = JSON.parse(snapshotJson);
+      
+      // Ensure execution field matches current mode toggle
+      // This prevents mismatch when user toggles mode but snapshot JSON wasn't updated
+      const snapshotIsLoop = snapshot.execution?.loop === true && (snapshot.execution?.frames || 1) > 1;
+      
+      if (isLoopMode && !snapshotIsLoop) {
+        // User wants loop mode but snapshot is static - update it
+        snapshot = {
+          ...snapshot,
+          execution: { frames: 60, loop: true }
+        };
+        setSnapshotJson(JSON.stringify(snapshot, null, 2));
+      } else if (!isLoopMode && snapshotIsLoop) {
+        // User wants static but snapshot is loop - update it
+        snapshot = {
+          ...snapshot,
+          execution: { frames: 1, loop: false }
+        };
+        setSnapshotJson(JSON.stringify(snapshot, null, 2));
+      }
+      
       const start = performance.now();
       const renderResult = await renderCertified(snapshot);
       const latencyMs = Math.round(performance.now() - start);
 
       if (renderResult.success && renderResult.data) {
         const data = renderResult.data;
-        setExpectedHash(data.imageHash);
-        if (isLoopMode && data.animationHash) {
-          setExpectedAnimationHash(data.animationHash);
+        
+        // For loop mode, we need BOTH hashes
+        if (isLoopMode) {
+          if (data.imageHash && data.animationHash) {
+            setExpectedHash(data.imageHash);
+            setExpectedAnimationHash(data.animationHash);
+            toast({
+              title: "Baseline sealed",
+              description: `Poster + animation hashes captured in ${latencyMs}ms`,
+            });
+          } else {
+            // Renderer didn't return animation hash - this means loop execution failed
+            setResult({
+              status: 'error',
+              mode: 'loop',
+              rendererUrl: getCanonicalUrl(),
+              errorTitle: "Loop execution incomplete",
+              error: "Renderer returned only poster hash. Ensure snapshot.execution = { frames: 60, loop: true }.",
+            });
+            setIsRendering(false);
+            return;
+          }
+        } else {
+          // Static mode - just need imageHash
+          setExpectedHash(data.imageHash);
+          setExpectedAnimationHash(null);
+          toast({
+            title: "Baseline sealed",
+            description: `Hash captured in ${latencyMs}ms`,
+          });
         }
-        toast({
-          title: "Baseline sealed",
-          description: `Hash captured in ${latencyMs}ms`,
-        });
       } else {
         const { title, body } = parseError(renderResult.error || "Unknown error");
         setResult({
@@ -491,8 +535,8 @@ export function LiveVerifier() {
         </span>
       </div>
 
-      {/* 2-Column Grid Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      {/* 2-Column Grid Layout - Full Width */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         {/* Left Panel - Snapshot Editor Card */}
         <div className="rounded-lg border border-border bg-card flex flex-col">
           {/* Card Header */}
@@ -583,12 +627,13 @@ export function LiveVerifier() {
           {/* Card Footer - Controls */}
           <div className="px-4 py-3 border-t border-border bg-muted/20">
             {/* Main Actions */}
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleSealBaseline}
                 disabled={isRendering || !!jsonError}
+                className="shrink-0"
               >
                 {isRendering ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -597,25 +642,28 @@ export function LiveVerifier() {
                 )}
                 Seal Baseline
               </Button>
-              <div className="flex items-center gap-2">
+              
+              <div className="flex items-center gap-2 sm:ml-auto">
                 <Button
                   variant="default"
                   size="sm"
                   onClick={handleCheckAgainstBaseline}
                   disabled={isVerifying || !!jsonError}
+                  className="flex-1 sm:flex-none"
                 >
                   {isVerifying ? (
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   ) : (
                     <Play className="w-4 h-4 mr-2" />
                   )}
-                  Check Against Baseline
+                  <span className="hidden sm:inline">Check Against Baseline</span>
+                  <span className="sm:hidden">Check</span>
                 </Button>
 
                 {/* Export Dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="px-2">
+                    <Button variant="outline" size="sm" className="px-2 shrink-0">
                       <Download className="w-4 h-4" />
                     </Button>
                   </DropdownMenuTrigger>
