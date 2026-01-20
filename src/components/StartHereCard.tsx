@@ -17,6 +17,7 @@ interface StartHereCardProps {
 const STATIC_PROOF_CODE = `
 // Deterministic Static Proof Program
 // Canvas: 1950x2400 (provided by runtime)
+// Seed is provided via snapshot.seed - random() is seeded automatically
 function setup() {
   // Do NOT call createCanvas() - canvas is provided by the Canonical Renderer
   noLoop();
@@ -24,7 +25,6 @@ function setup() {
 
 function draw() {
   background(20, 24, 30);
-  randomSeed(SEED);
   
   const cols = 8;
   const rows = 6;
@@ -59,7 +59,7 @@ function draw() {
   fill(255);
   textSize(24);
   textFont('monospace');
-  text('SEED: ' + SEED, 20, height - 20);
+  text('Sealed Execution', 20, height - 20);
 }
 `;
 
@@ -68,6 +68,7 @@ function draw() {
 const LOOP_PROOF_CODE = `
 // Deterministic Loop Proof Program
 // Canvas: 1950x2400 (provided by runtime)
+// Seed is provided via snapshot.seed - random() is seeded automatically
 function setup() {
   // Do NOT call createCanvas() - canvas is provided by the Canonical Renderer
   frameRate(30);
@@ -75,7 +76,6 @@ function setup() {
 
 function draw() {
   background(20, 24, 30);
-  randomSeed(SEED);
   
   const t = frameCount / 60;
   const cols = 6;
@@ -115,7 +115,7 @@ function draw() {
   fill(255);
   textSize(24);
   textFont('monospace');
-  text('FRAME: ' + frameCount + '/60  SEED: ' + SEED, 20, height - 20);
+  text('FRAME: ' + frameCount + '/60', 20, height - 20);
   
   if (frameCount >= 60) {
     noLoop();

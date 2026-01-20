@@ -111,15 +111,15 @@ function draw() {
   const meanRev = map(VAR[8], 0, 100, 0, 0.3);
   const density = floor(map(VAR[9], 0, 100, 50, 500));
   
-  // Generate equity curve using seeded PRNG
+  // Generate equity curve using runtime-seeded PRNG (random())
   const points = [];
   let equity = 100000;
   let peak = equity;
   
   for (let i = 0; i < density; i++) {
-    // Seeded random based on SEED and iteration
-    const r1 = frac(sin(SEED * 9999 + i * 12.9898) * 43758.5453);
-    const r2 = frac(sin(SEED * 7777 + i * 78.233) * 43758.5453);
+    // Use runtime-seeded random() - deterministic via snapshot.seed
+    const r1 = random();
+    const r2 = random();
     
     // Calculate daily return with all factors
     let dailyReturn = (drift / 252) + (volatility / sqrt(252)) * (r1 - 0.5) * 2;
@@ -290,17 +290,12 @@ function draw() {
   // === FOOTER ===
   fill(80);
   textSize(10);
-  text('Seed: ' + SEED, 80, 780);
+  text('Sealed Execution', 80, 780);
   text('Protocol: NexArt v1.2.0', 200, 780);
   text('Deterministic: Yes', 400, 780);
   
   // Hash placeholder (will be filled by renderer)
   text('Hash: sha256:...', 600, 780);
-}
-
-// Helper function
-function frac(x) {
-  return x - floor(x);
 }
 `.trim();
 }

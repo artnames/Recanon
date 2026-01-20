@@ -13,9 +13,11 @@ interface ProofGeneratorsProps {
 
 // Deterministic static Code Mode program - simple geometric shapes
 // NOTE: Canvas is provided by Canonical Renderer (1950x2400) - do NOT call createCanvas()
+// Seed is provided via snapshot.seed - random() is seeded automatically
 const STATIC_PROOF_CODE = `
 // Deterministic Static Proof Program
 // Canvas: 1950x2400 (provided by runtime)
+// Seed is provided via snapshot.seed - random() is seeded automatically
 
 function setup() {
   // Canvas is provided by the Canonical Renderer
@@ -24,7 +26,6 @@ function setup() {
 
 function draw() {
   background(20, 24, 30);
-  randomSeed(SEED);
   
   // Draw grid of deterministic shapes
   const cols = 8;
@@ -57,19 +58,20 @@ function draw() {
     }
   }
   
-  // Add text with seed info
   fill(255);
   textSize(24);
   textFont('monospace');
-  text('SEED: ' + SEED, 20, height - 20);
+  text('Sealed Execution', 20, height - 20);
 }
 `;
 
 // Deterministic loop Code Mode program - animated shapes
 // NOTE: Canvas is provided by Canonical Renderer (1950x2400) - do NOT call createCanvas()
+// Seed is provided via snapshot.seed - random() is seeded automatically
 const LOOP_PROOF_CODE = `
 // Deterministic Loop Proof Program
 // Canvas: 1950x2400 (provided by runtime)
+// Seed is provided via snapshot.seed - random() is seeded automatically
 
 function setup() {
   // Canvas is provided by the Canonical Renderer
@@ -78,7 +80,6 @@ function setup() {
 
 function draw() {
   background(20, 24, 30);
-  randomSeed(SEED);
   
   const t = frameCount / 60; // Normalized time (0-1 over 60 frames)
   const cols = 6;
@@ -119,7 +120,7 @@ function draw() {
   fill(255);
   textSize(24);
   textFont('monospace');
-  text('FRAME: ' + frameCount + '/60  SEED: ' + SEED, 20, height - 20);
+  text('FRAME: ' + frameCount + '/60', 20, height - 20);
   
   if (frameCount >= 60) {
     noLoop();
