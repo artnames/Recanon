@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import recanonIcon from "@/assets/recanon-icon.png";
+import { AuthButton } from "@/components/AuthButton";
 
 interface SidebarProps {
   activeView: string;
@@ -92,6 +93,11 @@ export function Sidebar({ activeView, onViewChange }: SidebarProps) {
             );
           })}
         </div>
+      </div>
+
+      {/* Auth Section */}
+      <div className="p-3 border-t border-sidebar-border">
+        <AuthButton />
       </div>
     </aside>
   );

@@ -321,9 +321,12 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
   };
 
   // Save state for library
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'auth_required'>('idle');
   const [savedClaimId, setSavedClaimId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  
+  // Store bundle for retry after auth
+  const [pendingBundle, setPendingBundle] = useState<ClaimBundle | null>(null);
 
   // Seal the claim
   const handleSeal = useCallback(async () => {
@@ -377,7 +380,7 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
       // Now save to library
       setSaveStatus('saving');
       try {
-        const { saveSealedClaim, normalizeSha256 } = await import('@/api/claims');
+        const { saveSealedClaim, normalizeSha256, checkAuthForSave } = await import('@/api/claims');
         const bundleToSave: ClaimBundle = {
           ...bundle,
           createdAt: new Date().toISOString(),
@@ -390,15 +393,36 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
             result: 'SEALED',
           },
         };
-        const saved = await saveSealedClaim(bundleToSave);
-        setSavedClaimId(saved.id);
-        setSaveStatus('saved');
-        toast.success('Saved to Library');
-      } catch (saveErr) {
-        const msg = saveErr instanceof Error ? saveErr.message : 'Failed to save';
-        setSaveError(msg);
-        setSaveStatus('error');
-        console.error('Failed to save to library:', saveErr);
+        
+        // Check auth before attempting save
+        const { isAuthenticated } = await checkAuthForSave();
+        if (!isAuthenticated) {
+          // Store bundle for retry after sign-in
+          setPendingBundle(bundleToSave);
+          setSaveStatus('auth_required');
+          toast.info('Sign in to save', { 
+            description: 'Your sealed claim is ready. Sign in to save it to the Library.' 
+          });
+        } else {
+          const saved = await saveSealedClaim(bundleToSave);
+          setSavedClaimId(saved.id);
+          setSaveStatus('saved');
+          setPendingBundle(null);
+          toast.success('Saved to Library');
+        }
+      } catch (saveErr: unknown) {
+        // Check for auth-required error
+        if (saveErr && typeof saveErr === 'object' && 'code' in saveErr && saveErr.code === 'AUTH_REQUIRED') {
+          setSaveStatus('auth_required');
+          toast.info('Sign in to save', { 
+            description: 'Your sealed claim is ready. Sign in to save it to the Library.' 
+          });
+        } else {
+          const msg = saveErr instanceof Error ? saveErr.message : 'Failed to save';
+          setSaveError(msg);
+          setSaveStatus('error');
+          console.error('Failed to save to library:', saveErr);
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -439,9 +463,36 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
     setVars([50, 50, 50, 50, 50, 50, 50, 50, 50, 50]);
     setSealResult(null);
     setSealError(null);
+    setPendingBundle(null);
     setCurrentStep(1);
     toast.info('Builder reset');
   };
+
+  // Retry save after authentication
+  const handleRetrySave = useCallback(async () => {
+    if (!pendingBundle) return;
+    
+    setSaveStatus('saving');
+    setSaveError(null);
+    
+    try {
+      const { saveSealedClaim } = await import('@/api/claims');
+      const saved = await saveSealedClaim(pendingBundle);
+      setSavedClaimId(saved.id);
+      setSaveStatus('saved');
+      setPendingBundle(null);
+      toast.success('Saved to Library');
+    } catch (saveErr: unknown) {
+      if (saveErr && typeof saveErr === 'object' && 'code' in saveErr && saveErr.code === 'AUTH_REQUIRED') {
+        setSaveStatus('auth_required');
+        toast.error('Still not signed in', { description: 'Please sign in to save your claim.' });
+      } else {
+        const msg = saveErr instanceof Error ? saveErr.message : 'Failed to save';
+        setSaveError(msg);
+        setSaveStatus('error');
+      }
+    }
+  }, [pendingBundle]);
 
   // Handle "Check Now" from sealed result
   const handleCheckNow = useCallback(async () => {
@@ -1147,6 +1198,7 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
                     onOpenInLibrary={handleOpenInLibrary}
                     onDownloadBundle={handleDownload}
                     onCheckNow={handleCheckNow}
+                    onRetrySave={handleRetrySave}
                   />
                 )}
 
