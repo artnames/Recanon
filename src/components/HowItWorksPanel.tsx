@@ -45,6 +45,10 @@ export function HowItWorksPanel() {
               <span className="text-warning font-bold mt-0.5">•</span>
               <span><strong className="text-foreground">Loop = 2 hashes</strong> — Animation outputs require both poster hash and animation hash.</span>
             </li>
+            <li className="flex items-start gap-2">
+              <span className="text-primary font-bold mt-0.5">•</span>
+              <span><strong className="text-foreground">Seed drives randomness</strong> — <code className="font-mono text-xs bg-muted px-1 rounded">snapshot.seed</code> seeds <code className="font-mono text-xs bg-muted px-1 rounded">random()</code> / <code className="font-mono text-xs bg-muted px-1 rounded">noise()</code>. The <code className="font-mono text-xs bg-muted px-1 rounded">SEED</code> global is optional.</span>
+            </li>
           </ul>
         </CardContent>
       </Card>

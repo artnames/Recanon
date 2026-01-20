@@ -53,18 +53,18 @@ export interface SeedValidationResult {
   hasSeedUsage: boolean;
   lineNumber?: number;
   lineContent?: string;
-  warning: string;
+  info: string;
 }
 
 /**
- * Checks if code references SEED variable (not guaranteed in canonical runtimes).
- * Returns a warning (not a hard block) if SEED is found.
+ * Checks if code references the SEED global variable.
+ * Returns an info message (not a hard block) if SEED is found.
  * 
- * This is a preflight warning to help developers write protocol-safe code.
- * The SEED variable is not guaranteed to exist in canonical runtimes.
- * Use random()/noise() instead which are seeded via snapshot.seed.
+ * Note: The SEED global is optional and may not exist in all canonical runtimes.
+ * Determinism is still guaranteed by snapshot.seed, which seeds random()/noise().
+ * Using SEED directly is not unsafe, but relying on it may break portability.
  */
-export function validateNoSeedUsage(code: string): SeedValidationResult {
+export function validateSeedUsage(code: string): SeedValidationResult {
   const lines = code.split('\n');
   
   // Pattern to match SEED as a standalone variable (not part of randomSeed, etc.)
@@ -81,14 +81,14 @@ export function validateNoSeedUsage(code: string): SeedValidationResult {
         hasSeedUsage: true,
         lineNumber: i + 1, // 1-indexed
         lineContent: line.trim(),
-        warning: "SEED is not guaranteed to exist in canonical runtimes. Use random()/noise() and rely on sealed seed input.",
+        info: "Note: SEED is not guaranteed to be defined in all canonical runtimes. Determinism still comes from snapshot.seed. Prefer using seeded random() / noise().",
       };
     }
   }
   
   return {
     hasSeedUsage: false,
-    warning: "",
+    info: "",
   };
 }
 
@@ -100,7 +100,7 @@ export interface CodeValidationResult {
     lineNumber?: number;
     lineContent?: string;
   }>;
-  warnings: Array<{
+  infos: Array<{
     type: 'seed';
     message: string;
     lineNumber?: number;
@@ -113,11 +113,11 @@ export interface CodeValidationResult {
  * 
  * Returns validation result with:
  * - errors: Hard blocks (createCanvas usage)
- * - warnings: Soft warnings (SEED usage)
+ * - infos: Informational notes (SEED usage - not a warning, just awareness)
  */
 export function validateCode(code: string): CodeValidationResult {
   const errors: CodeValidationResult['errors'] = [];
-  const warnings: CodeValidationResult['warnings'] = [];
+  const infos: CodeValidationResult['infos'] = [];
   
   // Check for createCanvas (hard block)
   const canvasResult = validateNoCreateCanvas(code);
@@ -130,12 +130,12 @@ export function validateCode(code: string): CodeValidationResult {
     });
   }
   
-  // Check for SEED usage (soft warning)
-  const seedResult = validateNoSeedUsage(code);
+  // Check for SEED usage (informational note, not a warning)
+  const seedResult = validateSeedUsage(code);
   if (seedResult.hasSeedUsage) {
-    warnings.push({
+    infos.push({
       type: 'seed',
-      message: seedResult.warning,
+      message: seedResult.info,
       lineNumber: seedResult.lineNumber,
       lineContent: seedResult.lineContent,
     });
@@ -144,6 +144,6 @@ export function validateCode(code: string): CodeValidationResult {
   return {
     valid: errors.length === 0,
     errors,
-    warnings,
+    infos,
   };
 }
