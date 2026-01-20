@@ -38,17 +38,17 @@ const STORAGE_KEY_VIEW = 'recanon_active_view';
 const STORAGE_KEY_CLAIM_EXAMPLE = 'recanon_claim_example';
 
 // Parse deep link params from URL
-function parseDeepLink(): { claimId?: string; hash?: string } {
+function parseDeepLink(): { claimId: string | null; hash: string | null } {
   const params = new URLSearchParams(window.location.search);
   return {
-    claimId: params.get('claim') || undefined,
-    hash: params.get('hash') || undefined,
+    claimId: params.get('claim') || null,
+    hash: params.get('hash') || null,
   };
 }
 
 export default function Index() {
   // Deep link state
-  const [deepLink, setDeepLink] = useState<{ claimId?: string; hash?: string }>(() => parseDeepLink());
+  const [deepLink, setDeepLink] = useState<{ claimId: string | null; hash: string | null }>(() => parseDeepLink());
   
   // Load saved view from localStorage, default to 'guide' for new users
   // But if deep link exists, go to library
@@ -100,7 +100,7 @@ export default function Index() {
     }
     // Clear deep link when navigating away from library
     if (view !== 'library') {
-      setDeepLink({});
+      setDeepLink({ claimId: null, hash: null });
     }
     setActiveView(view);
   }, []);
@@ -357,6 +357,10 @@ export default function Index() {
           <ClaimBuilder 
             prefillExample={claimExample} 
             onExampleConsumed={clearClaimExample}
+            onNavigateToLibrary={(claimId) => {
+              setDeepLink({ claimId, hash: null });
+              handleViewChange('library');
+            }}
           />
         );
       

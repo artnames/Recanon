@@ -71,17 +71,20 @@ import {
   getCodeTemplateForClaimType,
   getClaimTypeDescription,
 } from '@/certified/claimCodeTemplates';
-import { renderCertified } from '@/certified/canonicalClient';
+import { renderCertified, verifyCertified } from '@/certified/canonicalClient';
 import { toast } from 'sonner';
 import { SPORTS_EXAMPLE, PNL_EXAMPLE } from '@/data/claimExamples';
+import { SealedResultCard } from './SealedResultCard';
+import { normalizeSha256 } from '@/api/claims';
 
 interface ClaimBuilderProps {
   className?: string;
   prefillExample?: ClaimType | null;
   onExampleConsumed?: () => void;
+  onNavigateToLibrary?: (claimId: string) => void;
 }
 
-export function ClaimBuilder({ className, prefillExample, onExampleConsumed }: ClaimBuilderProps) {
+export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onNavigateToLibrary }: ClaimBuilderProps) {
   // Step tracking
   const [currentStep, setCurrentStep] = useState(1);
   
@@ -439,6 +442,46 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed }: C
     setCurrentStep(1);
     toast.info('Builder reset');
   };
+
+  // Handle "Check Now" from sealed result
+  const handleCheckNow = useCallback(async () => {
+    if (!sealResult) return;
+    
+    try {
+      const snapshot = {
+        code: generatedCode,
+        seed,
+        vars,
+        execution: isLoopMode ? { frames: 60, loop: true } : { frames: 1, loop: false },
+      };
+      
+      const response = await verifyCertified(
+        snapshot,
+        normalizeSha256(sealResult.posterHash),
+        isLoopMode && sealResult.animationHash ? normalizeSha256(sealResult.animationHash) : undefined
+      );
+      
+      if (response.verified) {
+        toast.success('Verification passed!', {
+          description: 'Hashes match. This claim is intact.',
+        });
+      } else {
+        toast.error('Verification failed', {
+          description: 'Hashes do not match.',
+        });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error('Check failed', { description: message });
+    }
+  }, [sealResult, generatedCode, seed, vars, isLoopMode]);
+
+  // Handle Open in Library
+  const handleOpenInLibrary = useCallback(() => {
+    if (savedClaimId && onNavigateToLibrary) {
+      onNavigateToLibrary(savedClaimId);
+    }
+  }, [savedClaimId, onNavigateToLibrary]);
 
   // Handle claim type change
   const handleClaimTypeChange = (type: ClaimType) => {
@@ -1092,26 +1135,19 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed }: C
                   </CollapsibleContent>
                 </Collapsible>
 
-                {/* Seal Result */}
+                {/* Seal Result Card */}
                 {sealResult && (
-                  <div className="p-4 bg-verified/10 border border-verified/30 rounded-lg space-y-2">
-                    <div className="flex items-center gap-2 text-verified">
-                      <CheckCircle2 className="w-5 h-5" />
-                      <span className="font-medium">Claim Sealed</span>
-                    </div>
-                    <div className="text-xs font-mono space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-muted-foreground w-24">Poster Hash:</span>
-                        <span className="truncate">{sealResult.posterHash}</span>
-                      </div>
-                      {sealResult.animationHash && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground w-24">Anim Hash:</span>
-                          <span className="truncate">{sealResult.animationHash}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  <SealedResultCard
+                    posterHash={normalizeSha256(sealResult.posterHash)}
+                    animationHash={sealResult.animationHash ? normalizeSha256(sealResult.animationHash) : null}
+                    isLoop={isLoopMode}
+                    saveStatus={saveStatus}
+                    savedClaimId={savedClaimId}
+                    saveError={saveError}
+                    onOpenInLibrary={handleOpenInLibrary}
+                    onDownloadBundle={handleDownload}
+                    onCheckNow={handleCheckNow}
+                  />
                 )}
 
                 {/* Seal Error */}
