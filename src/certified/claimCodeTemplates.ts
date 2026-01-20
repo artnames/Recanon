@@ -211,7 +211,6 @@ function draw() {
  * Sports result visualization template - Scorecard style
  */
 export function generateSportsTemplate(details?: SportsClaimDetails): string {
-  // Use VAR values for visual styling, but embed actual data if provided
   const homeTeam = details?.homeTeam || 'HOME';
   const awayTeam = details?.awayTeam || 'AWAY';
   const homeScore = details?.homeScore ?? 0;
@@ -220,11 +219,11 @@ export function generateSportsTemplate(details?: SportsClaimDetails): string {
   const matchEvent = details?.matchEvent || 'EVENT';
   const venue = details?.venue || '';
   const eventDate = details?.eventDate || '';
+  const claimStringValue = `${homeTeam}|${awayTeam}|${homeScore}|${awayScore}|${competition}|${matchEvent}|${venue}|${eventDate}`;
 
   return `
 // NexArt Code Mode - Sports Result Scorecard
 // Protocol: nexart v1.2.0
-// Canvas: 1950x2400 (provided by runtime - do NOT call createCanvas)
 
 function setup() {
   background(15, 15, 20);
@@ -232,7 +231,6 @@ function setup() {
 }
 
 function draw() {
-  // Embedded claim data
   const homeTeam = "${homeTeam.replace(/"/g, '\\"')}";
   const awayTeam = "${awayTeam.replace(/"/g, '\\"')}";
   const homeScore = ${homeScore};
@@ -241,18 +239,17 @@ function draw() {
   const matchEvent = "${matchEvent.replace(/"/g, '\\"')}";
   const venue = "${venue.replace(/"/g, '\\"')}";
   const eventDate = "${eventDate.replace(/"/g, '\\"')}";
+  const claimString = "${claimStringValue.replace(/"/g, '\\"')}";
 
-  // VAR interpretation for visual styling
-  const density = floor(map(VAR[0], 0, 100, 20, 80));
+  ${FINGERPRINT_HASH_FUNCTION}
+
   const teamHue1 = map(VAR[1], 0, 100, 0, 360);
   const teamHue2 = map(VAR[2], 0, 100, 0, 360);
-  const intensity = map(VAR[3], 0, 100, 0.5, 1.5);
   const confettiAmount = floor(map(VAR[4], 0, 100, 0, 200));
   const accentHue = map(VAR[5], 0, 100, 0, 360);
-  const patternDetail = floor(map(VAR[6], 0, 100, 10, 50));
-  const glowAmount = map(VAR[7], 0, 100, 0, 30);
   const borderWidth = map(VAR[8], 0, 100, 2, 8);
   const textureOpacity = map(VAR[9], 0, 100, 10, 60);
+  const claimHash = hashString(claimString);
 
   // Main panel
   fill(22, 22, 28);
@@ -284,24 +281,26 @@ function draw() {
   const cardWidth = 600;
   const cardHeight = 350;
 
-  // Team cards with color strips
+  // Team cards with color strips - hue offset by claim hash
   colorMode(HSB, 360, 100, 100);
   
   // Home team card
-  fill(teamHue1, 50, 25);
+  const homeHue = (teamHue1 + (claimHash % 60)) % 360;
+  fill(homeHue, 50, 25);
   noStroke();
   rect(width / 2 - cardWidth - 50, centerY - cardHeight / 2, cardWidth, cardHeight, 12);
   
   // Home team color strip
-  fill(teamHue1, 70, 60);
+  fill(homeHue, 70, 60);
   rect(width / 2 - cardWidth - 50, centerY - cardHeight / 2, 12, cardHeight, 12, 0, 0, 12);
   
   // Away team card
-  fill(teamHue2, 50, 25);
+  const awayHue = (teamHue2 + (claimHash % 60)) % 360;
+  fill(awayHue, 50, 25);
   rect(width / 2 + 50, centerY - cardHeight / 2, cardWidth, cardHeight, 12);
   
   // Away team color strip
-  fill(teamHue2, 70, 60);
+  fill(awayHue, 70, 60);
   rect(width / 2 + 50 + cardWidth - 12, centerY - cardHeight / 2, 12, cardHeight, 0, 12, 12, 0);
   
   colorMode(RGB, 255);
@@ -372,21 +371,23 @@ function draw() {
 
   // Bottom info panel
   fill(28, 28, 35);
-  rect(100, height - 350, width - 200, 230, 8);
+  rect(100, height - 400, width - 200, 180, 8);
 
   fill(120, 120, 140);
   textSize(12);
   textAlign(LEFT);
-  text('VERIFICATION DETAILS', 140, height - 310);
+  text('VERIFICATION DETAILS', 140, height - 360);
 
   stroke(50, 50, 60);
-  line(140, height - 290, width - 140, height - 290);
+  line(140, height - 340, width - 140, height - 340);
 
   fill(180, 180, 200);
   textSize(14);
-  text('This sports result has been sealed with cryptographic verification.', 140, height - 250);
-  text('The score data is deterministically embedded in the visual hash.', 140, height - 220);
-  text('Re-execute with identical inputs to independently verify.', 140, height - 190);
+  text('This sports result has been sealed with cryptographic verification.', 140, height - 300);
+  text('The score data is deterministically embedded in the visual hash.', 140, height - 270);
+
+  // Fingerprint strip
+  drawFingerprintStrip(claimString, height - 180, 20);
 
   // Footer
   fill(60, 60, 70);
@@ -669,7 +670,8 @@ export function getCodeTemplateForClaimType(
     returnPct: number;
     periodStart: string;
     periodEnd: string;
-  }
+  },
+  genericDetails?: { title?: string; statement?: string }
 ): string {
   switch (claimType) {
     case 'sports':
@@ -678,7 +680,7 @@ export function getCodeTemplateForClaimType(
       return generatePnlTemplate(pnlDetails);
     case 'generic':
     default:
-      return generateGenericTemplate();
+      return generateGenericTemplate(genericDetails?.title, genericDetails?.statement);
   }
 }
 
