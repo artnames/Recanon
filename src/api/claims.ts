@@ -162,10 +162,34 @@ function buildKeywords(bundle: ClaimBundle): string {
   return parts.join(' ').toLowerCase();
 }
 
+export interface AuthRequiredError extends Error {
+  code: 'AUTH_REQUIRED';
+}
+
+/**
+ * Check if user is authenticated before saving
+ */
+export async function checkAuthForSave(): Promise<{ isAuthenticated: boolean; userId: string | null }> {
+  const { data: { user } } = await supabase.auth.getUser();
+  return {
+    isAuthenticated: !!user,
+    userId: user?.id ?? null,
+  };
+}
+
 /**
  * Save a sealed claim bundle to Supabase
+ * Requires authentication - will throw AUTH_REQUIRED error if not logged in
  */
 export async function saveSealedClaim(bundle: ClaimBundle): Promise<SaveSealedClaimResult> {
+  // Check authentication first
+  const { isAuthenticated } = await checkAuthForSave();
+  if (!isAuthenticated) {
+    const error = new Error('Authentication required to save claims') as AuthRequiredError;
+    error.code = 'AUTH_REQUIRED';
+    throw error;
+  }
+
   // Ensure hashes are normalized
   const normalizedBundle: ClaimBundle = {
     ...bundle,
@@ -202,6 +226,12 @@ export async function saveSealedClaim(bundle: ClaimBundle): Promise<SaveSealedCl
     .single();
 
   if (error) {
+    // Check for RLS violation (auth required)
+    if (error.code === '42501' || error.message.includes('row-level security')) {
+      const authError = new Error('Authentication required to save claims') as AuthRequiredError;
+      authError.code = 'AUTH_REQUIRED';
+      throw authError;
+    }
     // Check for duplicate hash
     if (error.code === '23505') {
       // Unique constraint violation - claim already exists
