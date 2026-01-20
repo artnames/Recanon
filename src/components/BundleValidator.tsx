@@ -9,11 +9,102 @@ interface ValidationResult {
   missingFields: string[];
   mode: 'static' | 'loop' | 'unknown';
   warnings: string[];
+  // Extended info for debug panel
+  resolvedHash?: {
+    source: string;
+    raw: string;
+    normalized: string;
+  };
+  resolvedAnimationHash?: {
+    source: string;
+    raw: string;
+    normalized: string;
+  };
 }
 
 interface BundleValidatorProps {
   bundleJson: string;
   onLoadExample: () => void;
+}
+
+/**
+ * Normalize a hash for comparison:
+ * - Strip "sha256:" prefix if present
+ * - Convert to lowercase
+ * - Return 64-char hex string
+ */
+export function normalizeHash(hash: string | undefined | null): string {
+  if (!hash || typeof hash !== 'string') return '';
+  let normalized = hash.trim().toLowerCase();
+  if (normalized.startsWith('sha256:')) {
+    normalized = normalized.slice(7);
+  }
+  return normalized;
+}
+
+/**
+ * Format hash for display (with sha256: prefix)
+ */
+export function formatHashForDisplay(hash: string): string {
+  const normalized = normalizeHash(hash);
+  if (!normalized) return '';
+  return `sha256:${normalized}`;
+}
+
+/**
+ * Resolve expected image/poster hash from bundle with priority:
+ * 1. bundle.expectedImageHash
+ * 2. bundle.baseline.posterHash
+ * 3. bundle.baseline.imageHash
+ * 4. bundle.poster_hash (db row format)
+ * 5. bundle.posterHash
+ * 6. bundle.verification?.imageHash (legacy)
+ */
+export function resolveExpectedHash(bundle: any): { source: string; raw: string; normalized: string } | null {
+  const candidates: Array<{ path: string; value: any }> = [
+    { path: 'expectedImageHash', value: bundle?.expectedImageHash },
+    { path: 'baseline.posterHash', value: bundle?.baseline?.posterHash },
+    { path: 'baseline.imageHash', value: bundle?.baseline?.imageHash },
+    { path: 'poster_hash', value: bundle?.poster_hash },
+    { path: 'posterHash', value: bundle?.posterHash },
+    { path: 'verification.imageHash', value: bundle?.verification?.imageHash },
+  ];
+
+  for (const { path, value } of candidates) {
+    if (value && typeof value === 'string' && value.trim()) {
+      const normalized = normalizeHash(value);
+      if (normalized.length === 64) {
+        return { source: path, raw: value, normalized };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Resolve expected animation hash from bundle with priority:
+ * 1. bundle.expectedAnimationHash
+ * 2. bundle.baseline.animationHash
+ * 3. bundle.animation_hash (db row format)
+ * 4. bundle.animationHash
+ */
+export function resolveExpectedAnimationHash(bundle: any): { source: string; raw: string; normalized: string } | null {
+  const candidates: Array<{ path: string; value: any }> = [
+    { path: 'expectedAnimationHash', value: bundle?.expectedAnimationHash },
+    { path: 'baseline.animationHash', value: bundle?.baseline?.animationHash },
+    { path: 'animation_hash', value: bundle?.animation_hash },
+    { path: 'animationHash', value: bundle?.animationHash },
+  ];
+
+  for (const { path, value } of candidates) {
+    if (value && typeof value === 'string' && value.trim()) {
+      const normalized = normalizeHash(value);
+      if (normalized.length === 64) {
+        return { source: path, raw: value, normalized };
+      }
+    }
+  }
+  return null;
 }
 
 // Example static bundle that works without network (for instant loading)
@@ -117,17 +208,21 @@ export function validateBundle(bundleJson: string): ValidationResult {
                  (bundle.snapshot?.execution?.frames && bundle.snapshot.execution.frames > 1);
   const mode: 'static' | 'loop' | 'unknown' = bundle.snapshot ? (isLoop ? 'loop' : 'static') : 'unknown';
 
+  // Resolve hashes using multi-source priority
+  const resolvedHash = resolveExpectedHash(bundle);
+  const resolvedAnimationHash = resolveExpectedAnimationHash(bundle);
+
   // Check hashes based on mode
   if (mode === 'loop') {
-    if (!bundle.expectedImageHash && !bundle.expectedPosterHash) {
-      missingFields.push('expectedImageHash or expectedPosterHash (poster hash for loop mode)');
+    if (!resolvedHash) {
+      missingFields.push('expectedImageHash, baseline.posterHash, or posterHash (poster hash for loop mode)');
     }
-    if (!bundle.expectedAnimationHash) {
-      missingFields.push('expectedAnimationHash (required for loop mode)');
+    if (!resolvedAnimationHash) {
+      missingFields.push('expectedAnimationHash or baseline.animationHash (required for loop mode)');
     }
   } else if (mode === 'static') {
-    if (!bundle.expectedImageHash) {
-      missingFields.push('expectedImageHash');
+    if (!resolvedHash) {
+      missingFields.push('expectedImageHash, baseline.posterHash, or posterHash');
     }
   }
 
@@ -138,6 +233,11 @@ export function validateBundle(bundleJson: string): ValidationResult {
   if (bundle._note) {
     warnings.push('This is an example bundle — hashes may not be valid');
   }
+  
+  // Add info about resolved hash source
+  if (resolvedHash && resolvedHash.source !== 'expectedImageHash') {
+    warnings.push(`Using hash from ${resolvedHash.source} (recanon.event.v1 format)`);
+  }
 
   return {
     isValid: missingFields.length === 0,
@@ -146,6 +246,8 @@ export function validateBundle(bundleJson: string): ValidationResult {
     missingFields,
     mode,
     warnings,
+    resolvedHash: resolvedHash || undefined,
+    resolvedAnimationHash: resolvedAnimationHash || undefined,
   };
 }
 
@@ -214,7 +316,10 @@ export function BundleValidator({ bundleJson, onLoadExample }: BundleValidatorPr
               ))}
             </ul>
             <p className="text-xs text-muted-foreground mt-2">
-              Use the <strong>Create Result</strong> buttons above to create a complete bundle.
+              Accepted hash fields: <code className="font-mono">expectedImageHash</code>, <code className="font-mono">baseline.posterHash</code>, <code className="font-mono">posterHash</code>
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Or use the <strong>Create Result</strong> buttons above to create a complete bundle.
             </p>
           </div>
         </div>
@@ -238,6 +343,13 @@ export function BundleValidator({ bundleJson, onLoadExample }: BundleValidatorPr
                 {warning}
               </p>
             ))}
+            {validation.resolvedHash && (
+              <div className="text-xs text-muted-foreground font-mono mt-1 p-2 bg-muted/50 rounded">
+                <span className="text-foreground/70">Hash source:</span> {validation.resolvedHash.source}
+                <br />
+                <span className="text-foreground/70">Normalized:</span> {validation.resolvedHash.normalized.slice(0, 16)}…
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -247,11 +359,18 @@ export function BundleValidator({ bundleJson, onLoadExample }: BundleValidatorPr
   // Fully valid
   return (
     <div className="p-3 rounded-md border border-verified/30 bg-verified/5">
-      <div className="flex items-center gap-2">
-        <CheckCircle2 className="w-4 h-4 text-verified" />
-        <p className="text-sm text-verified">
-          Bundle is valid ({validation.mode} mode) — ready to check
-        </p>
+      <div className="flex items-start gap-2">
+        <CheckCircle2 className="w-4 h-4 text-verified mt-0.5" />
+        <div className="space-y-1">
+          <p className="text-sm text-verified">
+            Bundle is valid ({validation.mode} mode) — ready to check
+          </p>
+          {validation.resolvedHash && (
+            <p className="text-xs text-muted-foreground font-mono">
+              Hash from <code className="text-foreground/80">{validation.resolvedHash.source}</code>
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
