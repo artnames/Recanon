@@ -14,10 +14,57 @@ import type { ClaimType, SportsClaimDetails, PnlClaimDetails } from '@/types/cla
 export type ClaimPreset = 'generic' | 'sports' | 'financial' | 'custom';
 
 /**
+ * Simple deterministic hash function for claim fingerprint
+ * This is embedded in the generated code, not used at compile time
+ */
+const FINGERPRINT_HASH_FUNCTION = `
+  // Simple deterministic hash for fingerprint strip
+  function hashString(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash);
+  }
+  
+  // Draw fingerprint strip at bottom based on claim content hash
+  function drawFingerprintStrip(claimString, y, stripHeight) {
+    const baseHash = hashString(claimString);
+    const stripCount = 64;
+    const stripWidth = (width - 200) / stripCount;
+    
+    noStroke();
+    for (let i = 0; i < stripCount; i++) {
+      // Derive values from hash + index for deterministic variation
+      const segmentHash = hashString(claimString + '_' + i);
+      const brightness = 20 + (segmentHash % 60);
+      const hue = (baseHash + i * 5) % 360;
+      const saturation = 30 + (segmentHash % 40);
+      
+      colorMode(HSB, 360, 100, 100);
+      fill(hue, saturation, brightness);
+      rect(100 + i * stripWidth, y, stripWidth - 1, stripHeight);
+    }
+    colorMode(RGB, 255);
+    
+    // Add hash indicator text
+    fill(80, 80, 100);
+    textSize(9);
+    textAlign(LEFT);
+    text('FINGERPRINT: ' + baseHash.toString(16).toUpperCase().padStart(8, '0'), 100, y + stripHeight + 12);
+  }
+`;
+
+/**
  * Generic visualization template
  * Displays claim metadata with an abstract pattern
  */
-export function generateGenericTemplate(): string {
+export function generateGenericTemplate(title?: string, statement?: string): string {
+  const safeTitle = (title || 'SEALED STATEMENT').replace(/"/g, '\\"').slice(0, 100);
+  const safeStatement = (statement || '').replace(/"/g, '\\"').slice(0, 500);
+  
   return `
 // NexArt Code Mode - Claim Visualization (Generic Statement)
 // Protocol: nexart v1.2.0
@@ -29,6 +76,13 @@ function setup() {
 }
 
 function draw() {
+  // Embedded claim data for deterministic fingerprint
+  const claimTitle = "${safeTitle}";
+  const claimStatement = "${safeStatement}";
+  const claimString = claimTitle + '|' + claimStatement;
+  
+  ${FINGERPRINT_HASH_FUNCTION}
+
   // Parse VAR parameters for visual variation
   const patternDensity = floor(map(VAR[0], 0, 100, 20, 100));
   const hue1 = map(VAR[1], 0, 100, 0, 360);
@@ -50,19 +104,20 @@ function draw() {
   fill(35, 35, 45);
   rect(60, 60, width - 120, 120, 8, 8, 0, 0);
 
-  // Title
+  // Title - use embedded claim title
   fill(255);
-  textSize(36);
+  textSize(32);
   textFont('monospace');
   textAlign(LEFT, CENTER);
-  text('SEALED STATEMENT', 100, 120);
+  text(claimTitle.slice(0, 40), 100, 120);
 
   // Verified badge
   fill(80, 200, 120);
   textSize(14);
-  text('● SEALED', width - 200, 120);
+  textAlign(RIGHT, CENTER);
+  text('● SEALED', width - 100, 120);
 
-  // Abstract pattern area
+  // Abstract pattern area - influenced by claim hash
   push();
   translate(width / 2, 600);
   rotate(rotation);
@@ -71,10 +126,11 @@ function draw() {
   strokeWeight(lineWeight);
   noFill();
 
-  // Draw concentric pattern
+  // Draw concentric pattern - hash affects initial angle
+  const hashOffset = hashString(claimString) % 360;
   for (let i = 0; i < patternDensity; i++) {
     const r = random();
-    const angle = i * (TWO_PI / patternDensity);
+    const angle = i * (TWO_PI / patternDensity) + radians(hashOffset);
     const radius = 150 + i * 3;
     
     // Blend between two hues based on random
@@ -100,42 +156,53 @@ function draw() {
   stroke(40, 40, 50, 100);
   strokeWeight(0.5);
   for (let x = 100; x < width - 100; x += gridSize) {
-    line(x, 200, x, height - 200);
+    line(x, 200, x, height - 280);
   }
-  for (let y = 200; y < height - 200; y += gridSize) {
+  for (let y = 200; y < height - 280; y += gridSize) {
     line(100, y, width - 100, y);
+  }
+
+  // Display claim statement if provided
+  if (claimStatement.length > 0) {
+    fill(28, 28, 35);
+    noStroke();
+    rect(100, height - 480, width - 200, 100, 8);
+    
+    fill(200, 200, 220);
+    textSize(14);
+    textAlign(LEFT, TOP);
+    text(claimStatement.slice(0, 200), 130, height - 460, width - 260, 80);
   }
 
   // Info panel at bottom
   fill(28, 28, 35);
   noStroke();
-  rect(100, height - 400, width - 200, 280, 8);
+  rect(100, height - 350, width - 200, 200, 8);
 
   fill(120, 120, 140);
   textSize(12);
   textAlign(LEFT);
-  text('CLAIM DETAILS', 140, height - 360);
+  text('CLAIM DETAILS', 140, height - 310);
 
   stroke(50, 50, 60);
-  line(140, height - 340, width - 140, height - 340);
+  line(140, height - 290, width - 140, height - 290);
 
   fill(180, 180, 200);
   textSize(14);
-  text('This claim has been sealed using the NexArt Canonical Renderer.', 140, height - 300);
-  text('The visual pattern above is deterministically generated from the claim inputs.', 140, height - 270);
-  text('Any modification to inputs will produce a different pattern and hash.', 140, height - 240);
+  text('This claim has been sealed using the NexArt Canonical Renderer.', 140, height - 250);
+  text('The visual pattern above is deterministically generated from the claim inputs.', 140, height - 220);
+  text('Any modification to inputs will produce a different pattern and hash.', 140, height - 190);
 
-  fill(80, 200, 120);
-  textSize(11);
-  text('Verification: Re-execute with same inputs to verify hash match.', 140, height - 180);
+  // Fingerprint strip
+  drawFingerprintStrip(claimString, height - 130, 20);
 
   // Footer
   fill(60, 60, 70);
   textSize(10);
   textAlign(LEFT);
-  text('Protocol: NexArt v1.2.0', 100, height - 80);
-  text('Type: Generic Statement', 350, height - 80);
-  text('Canvas: 1950×2400', 600, height - 80);
+  text('Protocol: NexArt v1.2.0', 100, height - 70);
+  text('Type: Generic Statement', 350, height - 70);
+  text('Canvas: 1950×2400', 600, height - 70);
 }
 `.trim();
 }
@@ -353,6 +420,9 @@ export function generatePnlTemplate(details?: {
   const periodStart = details?.periodStart || '';
   const periodEnd = details?.periodEnd || '';
 
+  // Create a claim string that captures all the data for fingerprinting
+  const claimStringValue = `${assetName}|${startBalance}|${endBalance}|${fees}|${profit.toFixed(2)}|${returnPct.toFixed(2)}|${periodStart}|${periodEnd}`;
+
   return `
 // NexArt Code Mode - P&L Statement
 // Protocol: nexart v1.2.0
@@ -374,6 +444,9 @@ function draw() {
   const periodStart = "${periodStart}";
   const periodEnd = "${periodEnd}";
   const isPositive = profit >= 0;
+  const claimString = "${claimStringValue.replace(/"/g, '\\"')}";
+
+  ${FINGERPRINT_HASH_FUNCTION}
 
   // VAR interpretation for visual styling
   const barCount = floor(map(VAR[0], 0, 100, 20, 80));
@@ -536,28 +609,31 @@ function draw() {
 
   // Bottom info panel
   fill(28, 28, 35);
-  rect(100, height - 320, width - 200, 200, 8);
+  rect(100, height - 370, width - 200, 160, 8);
 
   fill(120, 120, 140);
   textSize(12);
   textAlign(LEFT);
-  text('VERIFICATION DETAILS', 140, height - 280);
+  text('VERIFICATION DETAILS', 140, height - 330);
 
   stroke(50, 50, 60);
-  line(140, height - 260, width - 140, height - 260);
+  line(140, height - 310, width - 140, height - 310);
 
   fill(180, 180, 200);
   textSize(14);
-  text('This P&L statement has been sealed with cryptographic verification.', 140, height - 220);
-  text('Financial figures are deterministically embedded in the visual hash.', 140, height - 190);
-  text('Re-execute with identical inputs to independently verify.', 140, height - 160);
+  text('This P&L statement has been sealed with cryptographic verification.', 140, height - 270);
+  text('Financial figures are deterministically embedded in the visual hash.', 140, height - 240);
+  text('Re-execute with identical inputs to independently verify.', 140, height - 210);
+
+  // Fingerprint strip
+  drawFingerprintStrip(claimString, height - 150, 20);
 
   // Footer
   fill(60, 60, 70);
   textSize(10);
   textAlign(LEFT);
-  text('Protocol: NexArt v1.2.0', 100, height - 80);
-  text('Type: P&L Statement', 350, height - 80);
+  text('Protocol: NexArt v1.2.0', 100, height - 70);
+  text('Type: P&L Statement', 350, height - 70);
 }
 `.trim();
 }

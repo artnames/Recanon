@@ -349,6 +349,14 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
         execution: isLoopMode ? { frames: 60, loop: true } : { frames: 1, loop: false },
       };
 
+      // Debug log for snapshot
+      console.log('[ClaimBuilder] Sealing snapshot:', {
+        seed: snapshot.seed,
+        vars: snapshot.vars,
+        codeLength: snapshot.code.length,
+        codePreview: snapshot.code.slice(0, 100),
+      });
+
       const response = await renderCertified(snapshot);
       
       if (!response.success || !response.data) {
@@ -1139,14 +1147,26 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="seed">Seed *</Label>
-                    <Input
-                      id="seed"
-                      type="number"
-                      value={seed}
-                      onChange={(e) => setSeed(parseInt(e.target.value) || 0)}
-                    />
+                    <div className="flex gap-2">
+                      <Input
+                        id="seed"
+                        type="number"
+                        value={seed}
+                        onChange={(e) => setSeed(parseInt(e.target.value) || 0)}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSeed(Math.floor(Math.random() * 1e9))}
+                        title="Generate random seed"
+                      >
+                        🎲
+                      </Button>
+                    </div>
                     <p className="text-xs text-muted-foreground">
-                      Seeds random() and noise() for determinism
+                      Seeds random() and noise() for determinism. Click 🎲 to randomize.
                     </p>
                   </div>
 
@@ -1163,6 +1183,27 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
                     </div>
                   </div>
                 </div>
+
+                {/* Snapshot Debug Panel */}
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="w-full justify-start text-xs text-muted-foreground">
+                      <ChevronRight className="w-3 h-3 mr-1" />
+                      Snapshot Debug (dev)
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="p-3 bg-muted/30 rounded-lg text-xs font-mono space-y-1 mt-2">
+                      <div><span className="text-muted-foreground">seed:</span> {seed}</div>
+                      <div><span className="text-muted-foreground">vars:</span> [{vars.join(', ')}]</div>
+                      <div><span className="text-muted-foreground">code length:</span> {generatedCode.length} chars</div>
+                      <div><span className="text-muted-foreground">claim string preview:</span></div>
+                      <div className="text-[10px] bg-muted p-2 rounded break-all max-h-20 overflow-auto">
+                        {generatedCode.match(/claimString = "([^"]+)"/)?.[1] || 'N/A'}
+                      </div>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
 
                 {/* Code Preview */}
                 <div className="p-3 bg-muted/50 rounded-lg">
