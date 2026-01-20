@@ -43,11 +43,11 @@ const FINGERPRINT_HASH_FUNCTION = `
       const hue = (baseHash + i * 5) % 360;
       const saturation = 30 + (segmentHash % 40);
       
-      colorMode(HSB, 360, 100, 100);
+      colorMode('HSB', 360, 100, 100);
       fill(hue, saturation, brightness);
       rect(100 + i * stripWidth, y, stripWidth - 1, stripHeight);
     }
-    colorMode(RGB, 255);
+    colorMode('RGB', 255);
     
     // Add hash indicator text
     fill(80, 80, 100);
@@ -144,7 +144,7 @@ function draw() {
     const radius = 150 + i * 3;
     
     // Blend between two hues based on random
-    colorMode(HSB, 360, 100, 100, 255);
+    colorMode('HSB', 360, 100, 100, 255);
     const h = lerp(hue1, hue2, r);
     stroke(h, 60, 80, opacity);
     
@@ -160,7 +160,7 @@ function draw() {
     endShape();
   }
   pop();
-  colorMode(RGB, 255);
+  colorMode('RGB', 255);
 
   // Grid pattern overlay
   stroke(40, 40, 50, 100);
@@ -295,7 +295,7 @@ function draw() {
   const cardHeight = 350;
 
   // Team cards with color strips - hue offset by claim hash
-  colorMode(HSB, 360, 100, 100);
+  colorMode('HSB', 360, 100, 100);
   
   // Home team card
   const homeHue = (teamHue1 + (claimHash % 60)) % 360;
@@ -316,7 +316,7 @@ function draw() {
   fill(awayHue, 70, 60);
   rect(width / 2 + 50 + cardWidth - 12, centerY - cardHeight / 2, 12, cardHeight, 0, 12, 12, 0);
   
-  colorMode(RGB, 255);
+  colorMode('RGB', 255);
 
   // Team names
   fill(255);
@@ -351,7 +351,7 @@ function draw() {
 
   // Confetti effect for celebrations
   if (confettiAmount > 0) {
-    colorMode(HSB, 360, 100, 100, 255);
+    colorMode('HSB', 360, 100, 100, 255);
     for (let i = 0; i < confettiAmount; i++) {
       const x = random() * width;
       const y = 300 + random() * 500;
@@ -365,7 +365,7 @@ function draw() {
       rect(0, 0, size, size * 2, 1);
       pop();
     }
-    colorMode(RGB, 255);
+    colorMode('RGB', 255);
   }
 
   // Venue and date footer
@@ -562,7 +562,7 @@ function draw() {
   }
 
   // Draw area under curve
-  colorMode(HSB, 360, 100, 100, 255);
+  colorMode('HSB', 360, 100, 100, 255);
   const hue = isPositive ? 140 : 0;
   fill(hue, accentSaturation, 40, 100);
   noStroke();
@@ -588,7 +588,7 @@ function draw() {
     vertex(x, y);
   }
   endShape();
-  colorMode(RGB, 255);
+  colorMode('RGB', 255);
 
   // Metrics row
   fill(28, 28, 35);
