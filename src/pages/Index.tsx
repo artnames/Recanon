@@ -8,6 +8,7 @@ import { VerifyPanel } from "@/components/VerifyPanel";
 import { DatasetsPage } from "@/components/DatasetsPage";
 import { SettingsPage } from "@/components/SettingsPage";
 import { HowItWorksPanel } from "@/components/HowItWorksPanel";
+import { ClaimBuilder } from "@/components/ClaimBuilder";
 import { DraftResultBanner } from "@/components/DraftResultBanner";
 import { MetricCard } from "@/components/MetricCard";
 import { EquityChart } from "@/components/EquityChart";
@@ -285,6 +286,9 @@ export default function Index() {
       
       case 'guide':
         return <HowItWorksPanel />;
+      
+      case 'claim':
+        return <ClaimBuilder />;
       
       case 'verify':
         return <VerifyPanel />;
