@@ -20,7 +20,7 @@ interface PayloadProofPanelProps {
   seed: number;
   vars: number[];
   loop: boolean;
-  claimData?: Record<string, unknown>;
+  claimData?: unknown;
   lastPosterHash?: string | null;
   lastPayloadFingerprint?: string | null;
 }
