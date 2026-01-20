@@ -175,16 +175,19 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
   // Generate code from claim type and details
   const generatedCode = useMemo(() => {
     if (claimType === 'sports') {
-      return getCodeTemplateForClaimType('sports', sportsDetails, undefined);
+      return getCodeTemplateForClaimType('sports', sportsDetails, undefined, undefined);
     } else if (claimType === 'pnl') {
       return getCodeTemplateForClaimType('pnl', undefined, {
         ...pnlDetails,
         profit: pnlMetrics.profit,
         returnPct: pnlMetrics.returnPct,
-      });
+      }, undefined);
     }
-    return getCodeTemplateForClaimType('generic', undefined, undefined);
-  }, [claimType, sportsDetails, pnlDetails, pnlMetrics]);
+    return getCodeTemplateForClaimType('generic', undefined, undefined, {
+      title: genericDetails.title,
+      statement: genericDetails.statement,
+    });
+  }, [claimType, sportsDetails, pnlDetails, pnlMetrics, genericDetails]);
 
   // Get current title/statement/subject based on claim type
   const currentClaimFields = useMemo(() => {
