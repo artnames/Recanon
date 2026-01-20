@@ -36,6 +36,152 @@ export interface SaveSealedClaimResult {
 }
 
 // ============================================================
+// VALIDATION ERROR HANDLING
+// ============================================================
+
+export interface ClaimValidationError extends Error {
+  code: 'VALIDATION_ERROR';
+  validationCode: string;
+  userMessage: string;
+  technicalDetails: string;
+}
+
+/**
+ * Map database constraint/trigger errors to user-friendly messages
+ */
+function parseValidationError(errorMessage: string): { userMessage: string; validationCode: string; technicalDetails: string } | null {
+  // Trigger validation errors (format: VALIDATION_ERROR:CODE:Message)
+  const triggerMatch = errorMessage.match(/VALIDATION_ERROR:(\w+):(.+)/);
+  if (triggerMatch) {
+    const [, code, detail] = triggerMatch;
+    const messages: Record<string, string> = {
+      'SNAPSHOT_MISSING': 'Snapshot missing required fields. The bundle must contain a valid snapshot object.',
+      'CODE_MISSING': 'Snapshot missing required fields. The code field must be a non-empty string.',
+      'SEED_INVALID': 'Snapshot missing required fields. The seed field must be a number.',
+      'VARS_INVALID': 'Snapshot missing required fields. The vars field must be an array.',
+      'VARS_LENGTH': 'Snapshot missing required fields. The vars array must have exactly 10 elements.',
+      'LOOP_NO_ANIMATION': 'Loop claims require animation hash. Claims in loop mode must include an animation_hash.',
+    };
+    return {
+      validationCode: code,
+      userMessage: messages[code] || detail,
+      technicalDetails: `Trigger validation failed: ${code} - ${detail}`,
+    };
+  }
+
+  // CHECK constraint violations
+  if (errorMessage.includes('chk_bundle_json_size')) {
+    return {
+      validationCode: 'BUNDLE_TOO_LARGE',
+      userMessage: 'Bundle too large (limit 200KB). Reduce the size of your claim bundle.',
+      technicalDetails: 'CHECK constraint chk_bundle_json_size failed: bundle_json exceeds 200KB limit',
+    };
+  }
+  
+  if (errorMessage.includes('chk_sources_size')) {
+    return {
+      validationCode: 'SOURCES_TOO_LARGE',
+      userMessage: 'Sources data too large (limit 100KB). Reduce the number or size of source references.',
+      technicalDetails: 'CHECK constraint chk_sources_size failed: sources exceeds 100KB limit',
+    };
+  }
+
+  if (errorMessage.includes('chk_title_length')) {
+    return {
+      validationCode: 'TITLE_TOO_LONG',
+      userMessage: 'Title too long (max 500 characters).',
+      technicalDetails: 'CHECK constraint chk_title_length failed: title exceeds 500 character limit',
+    };
+  }
+
+  if (errorMessage.includes('chk_statement_length')) {
+    return {
+      validationCode: 'STATEMENT_TOO_LONG',
+      userMessage: 'Statement too long (max 5000 characters).',
+      technicalDetails: 'CHECK constraint chk_statement_length failed: statement exceeds 5000 character limit',
+    };
+  }
+
+  if (errorMessage.includes('chk_subject_length')) {
+    return {
+      validationCode: 'SUBJECT_TOO_LONG',
+      userMessage: 'Subject too long (max 500 characters).',
+      technicalDetails: 'CHECK constraint chk_subject_length failed: subject exceeds 500 character limit',
+    };
+  }
+
+  if (errorMessage.includes('chk_keywords_length')) {
+    return {
+      validationCode: 'KEYWORDS_TOO_LONG',
+      userMessage: 'Keywords too long (max 2000 characters).',
+      technicalDetails: 'CHECK constraint chk_keywords_length failed: keywords exceeds 2000 character limit',
+    };
+  }
+
+  if (errorMessage.includes('chk_poster_hash_format')) {
+    return {
+      validationCode: 'INVALID_POSTER_HASH',
+      userMessage: 'Invalid poster hash format. Must be a valid SHA-256 hash.',
+      technicalDetails: 'CHECK constraint chk_poster_hash_format failed: poster_hash must match sha256 format',
+    };
+  }
+
+  if (errorMessage.includes('chk_animation_hash_format')) {
+    return {
+      validationCode: 'INVALID_ANIMATION_HASH',
+      userMessage: 'Invalid animation hash format. Must be a valid SHA-256 hash.',
+      technicalDetails: 'CHECK constraint chk_animation_hash_format failed: animation_hash must match sha256 format',
+    };
+  }
+
+  if (errorMessage.includes('chk_bundle_version')) {
+    return {
+      validationCode: 'INVALID_BUNDLE_VERSION',
+      userMessage: 'Invalid bundle version. Only "recanon.event.v1" is supported.',
+      technicalDetails: 'CHECK constraint chk_bundle_version failed: bundle_version must be "recanon.event.v1"',
+    };
+  }
+
+  if (errorMessage.includes('chk_mode')) {
+    return {
+      validationCode: 'INVALID_MODE',
+      userMessage: 'Invalid mode. Must be "static" or "loop".',
+      technicalDetails: 'CHECK constraint chk_mode failed: mode must be "static" or "loop"',
+    };
+  }
+
+  if (errorMessage.includes('chk_bundle_json_is_object')) {
+    return {
+      validationCode: 'BUNDLE_NOT_OBJECT',
+      userMessage: 'Invalid bundle format. Bundle must be a JSON object.',
+      technicalDetails: 'CHECK constraint chk_bundle_json_is_object failed: bundle_json must be a JSON object',
+    };
+  }
+
+  if (errorMessage.includes('chk_sources_is_array')) {
+    return {
+      validationCode: 'SOURCES_NOT_ARRAY',
+      userMessage: 'Invalid sources format. Sources must be a JSON array.',
+      technicalDetails: 'CHECK constraint chk_sources_is_array failed: sources must be a JSON array',
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Create a validation error with user-friendly message
+ */
+function createValidationError(parsed: { userMessage: string; validationCode: string; technicalDetails: string }): ClaimValidationError {
+  const error = new Error(parsed.userMessage) as ClaimValidationError;
+  error.code = 'VALIDATION_ERROR';
+  error.validationCode = parsed.validationCode;
+  error.userMessage = parsed.userMessage;
+  error.technicalDetails = parsed.technicalDetails;
+  return error;
+}
+
+// ============================================================
 // HASH NORMALIZATION
 // ============================================================
 
@@ -239,6 +385,11 @@ export async function saveSealedClaim(bundle: ClaimBundle): Promise<SaveSealedCl
       if (existing) {
         return { id: existing.id, poster_hash: existing.poster_hash };
       }
+    }
+    // Check for validation errors (CHECK constraints or trigger)
+    const validationParsed = parseValidationError(error.message);
+    if (validationParsed) {
+      throw createValidationError(validationParsed);
     }
     throw new Error(`Failed to save sealed claim: ${error.message}`);
   }
