@@ -332,6 +332,14 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
   // Store bundle for retry after auth
   const [pendingBundle, setPendingBundle] = useState<ClaimBundle | null>(null);
 
+  // Exact snapshot sent to renderer for the most recent seal attempt
+  const [lastSealedSnapshot, setLastSealedSnapshot] = useState<{
+    code: string;
+    seed: number;
+    vars: number[];
+    execution: { frames: number; loop: boolean };
+  } | null>(null);
+
   // Seal the claim
   const handleSeal = useCallback(async () => {
     if (!canSeal) return;
@@ -345,12 +353,38 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
     setSaveErrorDetails(null);
 
     try {
+      // Recompute code at click-time from *current* form state (prevents any stale snapshot.code)
+      const pnlNow = claimType === 'pnl' ? calculatePnlMetrics(pnlDetails) : null;
+      const codeAtSeal = (() => {
+        if (claimType === 'sports') {
+          return getCodeTemplateForClaimType('sports', sportsDetails, undefined, undefined);
+        }
+        if (claimType === 'pnl') {
+          return getCodeTemplateForClaimType(
+            'pnl',
+            undefined,
+            {
+              ...pnlDetails,
+              profit: pnlNow?.profit ?? 0,
+              returnPct: pnlNow?.returnPct ?? 0,
+            },
+            undefined
+          );
+        }
+        return getCodeTemplateForClaimType('generic', undefined, undefined, {
+          title: genericDetails.title,
+          statement: genericDetails.statement,
+        });
+      })();
+
       const snapshot = {
-        code: generatedCode,
+        code: codeAtSeal,
         seed,
         vars,
         execution: isLoopMode ? { frames: 60, loop: true } : { frames: 1, loop: false },
       };
+
+      setLastSealedSnapshot(snapshot);
 
       // Extract claimString from generated code and compute hash for debugging
       const claimStringMatch = snapshot.code.match(/claimString = "([^"]+)"/);
@@ -405,6 +439,13 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
         const bundleToSave: ClaimBundle = {
           ...bundle,
           createdAt: new Date().toISOString(),
+          snapshot: {
+            ...bundle.snapshot,
+            code: snapshot.code,
+            seed: snapshot.seed,
+            vars: snapshot.vars,
+            execution: snapshot.execution,
+          },
           baseline: {
             posterHash: normalizeSha256(sealedResult.posterHash),
             animationHash: sealedResult.animationHash ? normalizeSha256(sealedResult.animationHash) : null,
@@ -1266,25 +1307,20 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
                     savedClaimId={savedClaimId}
                     saveError={saveError}
                     saveErrorDetails={saveErrorDetails}
-                    snapshotDebug={{
-                      codeLength: generatedCode.length,
-                      seed,
-                      vars,
-                      codePreview: generatedCode.slice(0, 120),
-                      claimStringPreview: generatedCode.match(/claimString = "([^"]+)"/)?.[1]?.slice(0, 120) || 'N/A',
-                    }}
+                    snapshotDebug={lastSealedSnapshot ? {
+                      codeLength: lastSealedSnapshot.code.length,
+                      seed: lastSealedSnapshot.seed,
+                      vars: lastSealedSnapshot.vars,
+                      codePreview: lastSealedSnapshot.code.slice(0, 120),
+                      claimStringPreview: lastSealedSnapshot.code.match(/claimString = "([^"]+)"/)?.[1]?.slice(0, 120) || 'N/A',
+                    } : null}
                     onOpenInLibrary={handleOpenInLibrary}
                     onDownloadBundle={handleDownload}
                     onCheckNow={handleCheckNow}
                     onRetrySave={handleRetrySave}
                     onCopySnapshot={() => {
-                      const snapshot = {
-                        code: generatedCode,
-                        seed,
-                        vars,
-                        execution: isLoopMode ? { frames: 60, loop: true } : { frames: 1, loop: false },
-                      };
-                      navigator.clipboard.writeText(JSON.stringify(snapshot, null, 2));
+                      if (!lastSealedSnapshot) return;
+                      navigator.clipboard.writeText(JSON.stringify(lastSealedSnapshot, null, 2));
                       toast.success('Snapshot JSON copied');
                     }}
                   />
