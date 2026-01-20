@@ -102,7 +102,7 @@ export function QuickGuide() {
           </li>
           <li className="flex items-start gap-2">
             <CheckCircle2 className="w-4 h-4 text-verified mt-0.5 flex-shrink-0" />
-            <span><strong className="text-foreground">Seed</strong> — Deterministic randomness from the original execution.</span>
+            <span><strong className="text-foreground">Seed</strong> — The <code className="font-mono text-xs bg-muted px-1 rounded">snapshot.seed</code> value seeds all runtime randomness (<code className="font-mono text-xs bg-muted px-1 rounded">random()</code>, <code className="font-mono text-xs bg-muted px-1 rounded">noise()</code>).</span>
           </li>
           <li className="flex items-start gap-2">
             <CheckCircle2 className="w-4 h-4 text-verified mt-0.5 flex-shrink-0" />
@@ -113,6 +113,37 @@ export function QuickGuide() {
             <span><strong className="text-foreground">Output Hash</strong> — SHA-256 of rendered bytes must match.</span>
           </li>
         </ul>
+      </div>
+
+      {/* How Seed Works */}
+      <div className="p-4 rounded-md border border-primary/30 bg-primary/5">
+        <h3 className="section-header flex items-center gap-2">
+          <Info className="w-4 h-4 text-primary" />
+          How Seed Works
+        </h3>
+        <div className="space-y-2 text-sm text-muted-foreground">
+          <p>
+            <strong className="text-foreground">Determinism is guaranteed by <code className="font-mono text-xs bg-muted px-1 rounded">snapshot.seed</code></strong> — 
+            the Canonical Renderer uses this value to seed all runtime random functions.
+          </p>
+          <ul className="space-y-1 pl-4">
+            <li className="flex items-start gap-2">
+              <span className="text-primary">•</span>
+              <span><code className="font-mono text-xs bg-muted px-1 rounded">random()</code> and <code className="font-mono text-xs bg-muted px-1 rounded">noise()</code> are automatically seeded with snapshot.seed</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-primary">•</span>
+              <span>Identical seed + code + vars = identical output (byte-for-byte)</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-muted-foreground">•</span>
+              <span className="text-muted-foreground">
+                The <code className="font-mono text-xs bg-muted px-1 rounded">SEED</code> global variable is optional — 
+                some runtimes expose it, others don't. Prefer <code className="font-mono text-xs bg-muted px-1 rounded">random()</code> for portability.
+              </span>
+            </li>
+          </ul>
+        </div>
       </div>
 
       {/* Execution Rules */}
