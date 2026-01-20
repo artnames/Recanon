@@ -5,7 +5,7 @@
  * Click to view details and re-verify claims.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Search, 
   Copy, 
@@ -22,7 +22,10 @@ import {
   XCircle,
   AlertTriangle,
   ChevronLeft,
-  RefreshCw
+  RefreshCw,
+  Stamp,
+  Play,
+  Image
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -48,6 +51,7 @@ import { downloadClaimBundle, serializeClaimBundle } from '@/types/claimBundle';
 import type { ClaimBundle } from '@/types/claimBundle';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
+import { SearchFilterChips, parseSearchQuery } from './SearchFilterChips';
 
 interface LibraryViewProps {
   initialClaimId?: string | null;
@@ -59,10 +63,11 @@ type VerifyStatus = 'idle' | 'checking' | 'passed' | 'failed' | 'error';
 
 export function LibraryView({ initialClaimId, initialHash, onNavigateToCreate }: LibraryViewProps) {
   // List state
-  const [claims, setClaims] = useState<SealedClaimRow[]>([]);
+  const [allClaims, setAllClaims] = useState<SealedClaimRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [activeFilters, setActiveFilters] = useState<string[]>([]);
   
   // Detail view state
   const [selectedClaim, setSelectedClaim] = useState<SealedClaimRow | null>(null);
@@ -81,24 +86,79 @@ export function LibraryView({ initialClaimId, initialHash, onNavigateToCreate }:
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Load claims list
+  // Load all claims (we filter client-side for better UX)
   const loadClaims = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await listSealedClaims({ q: debouncedQuery, limit: 100 });
-      setClaims(data);
+      const data = await listSealedClaims({ limit: 200 });
+      setAllClaims(data);
     } catch (error) {
       console.error('Failed to load claims:', error);
       toast.error('Failed to load claims');
     } finally {
       setIsLoading(false);
     }
-  }, [debouncedQuery]);
+  }, []);
 
-  // Initial load and when search changes
+  // Initial load only
   useEffect(() => {
     loadClaims();
   }, [loadClaims]);
+
+  // Filter claims client-side based on search and filters
+  const filteredClaims = useMemo(() => {
+    const { filters, textQuery } = parseSearchQuery(debouncedQuery);
+    
+    // Merge parsed filters with active chip filters
+    const mergedFilters = { ...filters };
+    activeFilters.forEach(f => {
+      const [key, value] = f.split(':');
+      if (key === 'type') mergedFilters.type = value;
+      if (key === 'mode') mergedFilters.mode = value;
+    });
+    
+    return allClaims.filter(claim => {
+      // Type filter
+      if (mergedFilters.type) {
+        // Map 'finance' to 'pnl'
+        const filterType = mergedFilters.type === 'finance' ? 'pnl' : mergedFilters.type;
+        if (claim.claim_type !== filterType) return false;
+      }
+      
+      // Mode filter
+      if (mergedFilters.mode && claim.mode !== mergedFilters.mode) return false;
+      
+      // Text search
+      if (textQuery.trim()) {
+        const q = textQuery.toLowerCase();
+        const searchableText = [
+          claim.title,
+          claim.statement,
+          claim.subject,
+          claim.poster_hash,
+          claim.keywords,
+        ].filter(Boolean).join(' ').toLowerCase();
+        
+        if (!searchableText.includes(q)) return false;
+      }
+      
+      return true;
+    });
+  }, [allClaims, debouncedQuery, activeFilters]);
+
+  // Toggle filter chip
+  const handleToggleFilter = (filter: string) => {
+    setActiveFilters(prev => 
+      prev.includes(filter)
+        ? prev.filter(f => f !== filter)
+        : [...prev, filter]
+    );
+  };
+
+  const handleClearFilters = () => {
+    setActiveFilters([]);
+    setSearchQuery('');
+  };
 
   // Handle deep link on mount
   useEffect(() => {
@@ -475,19 +535,28 @@ export function LibraryView({ initialClaimId, initialHash, onNavigateToCreate }:
       </div>
 
       {/* Search */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by title, statement, hash…"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by title, hash, or type:sports mode:loop…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Button variant="outline" size="icon" onClick={loadClaims}>
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
         </div>
-        <Button variant="outline" size="icon" onClick={loadClaims}>
-          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-        </Button>
+        
+        {/* Filter Chips */}
+        <SearchFilterChips
+          activeFilters={activeFilters}
+          onToggleFilter={handleToggleFilter}
+          onClearAll={handleClearFilters}
+        />
       </div>
 
       {/* Table */}
@@ -497,16 +566,36 @@ export function LibraryView({ initialClaimId, initialHash, onNavigateToCreate }:
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
-          ) : claims.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <FileText className="w-12 h-12 text-muted-foreground/50 mb-4" />
-              <p className="text-muted-foreground">
-                {debouncedQuery ? 'No claims match your search.' : 'No sealed claims yet.'}
-              </p>
-              {onNavigateToCreate && !debouncedQuery && (
-                <Button variant="outline" className="mt-4" onClick={onNavigateToCreate}>
-                  Create Your First Claim
-                </Button>
+          ) : filteredClaims.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+              {allClaims.length === 0 ? (
+                <>
+                  <Stamp className="w-12 h-12 text-muted-foreground/50 mb-4" />
+                  <h3 className="font-medium mb-1">No Sealed Claims Yet</h3>
+                  <p className="text-sm text-muted-foreground max-w-sm">
+                    Your sealed claims will appear here. Create one in Claim Studio to get started.
+                  </p>
+                  {onNavigateToCreate && (
+                    <Button className="mt-4" onClick={onNavigateToCreate}>
+                      Create Your First Claim
+                    </Button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Search className="w-12 h-12 text-muted-foreground/50 mb-4" />
+                  <h3 className="font-medium mb-1">No Matches Found</h3>
+                  <p className="text-sm text-muted-foreground max-w-sm">
+                    Try searching by hash, team name, or adjust filters.
+                  </p>
+                  <Button 
+                    variant="outline" 
+                    className="mt-4" 
+                    onClick={handleClearFilters}
+                  >
+                    Clear Filters
+                  </Button>
+                </>
               )}
             </div>
           ) : (
@@ -521,7 +610,7 @@ export function LibraryView({ initialClaimId, initialHash, onNavigateToCreate }:
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {claims.map((claim) => (
+                {filteredClaims.map((claim) => (
                   <TableRow 
                     key={claim.id} 
                     className="cursor-pointer hover:bg-muted/50"
