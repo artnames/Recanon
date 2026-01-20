@@ -162,13 +162,13 @@ export function ProofGenerators({ onBundleGenerated }: ProofGeneratorsProps) {
       }
 
       const data = result.data;
-      const artifactId = `SEALED-${data.imageHash.slice(0, 8).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+      const artifactId = `SEALED-${data.posterHash.slice(0, 8).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
 
       const bundle = {
         runtime: 'nexart-canonical-renderer',
         artifactId,
         snapshot,
-        expectedImageHash: data.imageHash,
+        expectedImageHash: data.posterHash,
         verificationRequirements: 'static-single-hash' as const,
         canonical: {
           url: getCanonicalUrl(),
@@ -177,7 +177,7 @@ export function ProofGenerators({ onBundleGenerated }: ProofGeneratorsProps) {
         },
         output: {
           mimeType: data.mime,
-          base64: data.outputBase64,
+          base64: data.posterBase64,
         },
         metadata: data.metadata,
         createdAt: new Date().toISOString(),
@@ -188,7 +188,7 @@ export function ProofGenerators({ onBundleGenerated }: ProofGeneratorsProps) {
       setLastGeneratedBundle({
         mode: 'static',
         json: bundleJson,
-        imageHash: result.data.imageHash,
+        imageHash: data.posterHash,
       });
       
       onBundleGenerated(bundleJson);
@@ -221,13 +221,13 @@ export function ProofGenerators({ onBundleGenerated }: ProofGeneratorsProps) {
       }
 
       const data = result.data;
-      const artifactId = `SEALED-${data.imageHash.slice(0, 8).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+      const artifactId = `SEALED-${data.posterHash.slice(0, 8).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
 
       const bundle = {
         runtime: 'nexart-canonical-renderer',
         artifactId,
         snapshot,
-        expectedImageHash: data.imageHash, // Poster hash
+        expectedImageHash: data.posterHash, // Poster hash
         expectedAnimationHash: data.animationHash,
         verificationRequirements: 'loop-requires-both-hashes' as const,
         canonical: {
@@ -237,7 +237,7 @@ export function ProofGenerators({ onBundleGenerated }: ProofGeneratorsProps) {
         },
         output: {
           mimeType: data.mime,
-          posterBase64: data.outputBase64,
+          posterBase64: data.posterBase64,
           animationBase64: data.animationBase64,
         },
         metadata: data.metadata,
@@ -249,8 +249,8 @@ export function ProofGenerators({ onBundleGenerated }: ProofGeneratorsProps) {
       setLastGeneratedBundle({
         mode: 'loop',
         json: bundleJson,
-        imageHash: result.data.imageHash,
-        animationHash: result.data.animationHash,
+        imageHash: data.posterHash,
+        animationHash: data.animationHash || undefined,
       });
       
       onBundleGenerated(bundleJson);

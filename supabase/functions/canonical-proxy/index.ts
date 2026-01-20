@@ -5,10 +5,26 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// In-memory rate limiting (naive implementation for demo)
-const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+// ============================================================
+// SECURITY CONFIGURATION
+// ============================================================
+
+// Allowlisted routes - ONLY these endpoints are proxied
+const ALLOWED_ROUTES = new Set(['/health', '/render', '/verify', '', '/']);
+
+// Maximum payload size (1MB for render requests with code)
+const MAX_PAYLOAD_SIZE = 1024 * 1024;
+
+// Rate limiting configuration
 const RATE_LIMIT = 30; // requests per minute
 const RATE_WINDOW_MS = 60 * 1000; // 1 minute
+
+// In-memory rate limiting
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+
+// ============================================================
+// HELPER FUNCTIONS
+// ============================================================
 
 function getClientIP(req: Request): string {
   // Try various headers that might contain the client IP
@@ -52,6 +68,30 @@ setInterval(() => {
   }
 }, 60000); // Clean every minute
 
+function createErrorResponse(
+  status: number, 
+  error: string, 
+  message: string, 
+  rateRemaining?: number,
+  extra?: Record<string, unknown>
+): Response {
+  const body = JSON.stringify({ error, message, ...extra });
+  const headers: Record<string, string> = {
+    ...corsHeaders,
+    'Content-Type': 'application/json',
+  };
+  
+  if (rateRemaining !== undefined) {
+    headers['X-RateLimit-Remaining'] = String(rateRemaining);
+  }
+  
+  return new Response(body, { status, headers });
+}
+
+// ============================================================
+// MAIN HANDLER
+// ============================================================
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -61,18 +101,29 @@ serve(async (req) => {
   const url = new URL(req.url);
   const path = url.pathname.replace('/canonical-proxy', '');
 
+  // ========== SECURITY: Route allowlist ==========
+  if (!ALLOWED_ROUTES.has(path)) {
+    console.warn(`[canonical-proxy] Blocked unknown route: ${path}`);
+    return createErrorResponse(
+      404,
+      'Not found',
+      `Unknown endpoint: ${path}. Only /health, /render, and /verify are allowed.`
+    );
+  }
+
   // Get the canonical renderer URL from secrets
   const CANONICAL_RENDERER_URL = Deno.env.get('CANONICAL_RENDERER_URL');
   
   if (!CANONICAL_RENDERER_URL) {
     console.error('[canonical-proxy] CANONICAL_RENDERER_URL secret not configured');
-    return new Response(
-      JSON.stringify({ error: 'Proxy not configured: missing CANONICAL_RENDERER_URL secret' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    return createErrorResponse(
+      500,
+      'Proxy not configured',
+      'Missing CANONICAL_RENDERER_URL secret. Contact administrator.'
     );
   }
 
-  // Rate limiting
+  // ========== SECURITY: Rate limiting ==========
   const clientIP = getClientIP(req);
   const rateCheck = checkRateLimit(clientIP);
   
@@ -107,27 +158,92 @@ serve(async (req) => {
     method = 'GET';
   } else if (path === '/render') {
     if (method !== 'POST') {
-      return new Response(
-        JSON.stringify({ error: 'Method not allowed', message: 'POST required for /render' }),
-        { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return createErrorResponse(405, 'Method not allowed', 'POST required for /render', rateCheck.remaining);
     }
     targetPath = '/render';
-    body = await req.text();
-  } else if (path === '/verify') {
-    if (method !== 'POST') {
-      return new Response(
-        JSON.stringify({ error: 'Method not allowed', message: 'POST required for /verify' }),
-        { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    
+    // ========== SECURITY: Payload size limit ==========
+    const contentLength = req.headers.get('content-length');
+    if (contentLength && parseInt(contentLength, 10) > MAX_PAYLOAD_SIZE) {
+      console.warn(`[canonical-proxy] Payload too large: ${contentLength} bytes`);
+      return createErrorResponse(
+        413, 
+        'Payload too large', 
+        `Request body exceeds maximum size of ${MAX_PAYLOAD_SIZE / 1024}KB`,
+        rateCheck.remaining
       );
     }
-    targetPath = '/verify';
+    
     body = await req.text();
+    
+    // Double-check actual body size
+    if (body.length > MAX_PAYLOAD_SIZE) {
+      console.warn(`[canonical-proxy] Payload too large after read: ${body.length} bytes`);
+      return createErrorResponse(
+        413, 
+        'Payload too large', 
+        `Request body exceeds maximum size of ${MAX_PAYLOAD_SIZE / 1024}KB`,
+        rateCheck.remaining
+      );
+    }
+    
+    // ========== SECURITY: Basic payload validation ==========
+    try {
+      const parsed = JSON.parse(body);
+      if (!parsed.code || typeof parsed.code !== 'string') {
+        return createErrorResponse(
+          400,
+          'Invalid request',
+          'Missing or invalid "code" field. Snapshot must include a code string.',
+          rateCheck.remaining
+        );
+      }
+      if (typeof parsed.seed !== 'number') {
+        return createErrorResponse(
+          400,
+          'Invalid request', 
+          'Missing or invalid "seed" field. Snapshot must include a numeric seed.',
+          rateCheck.remaining
+        );
+      }
+    } catch {
+      return createErrorResponse(
+        400,
+        'Invalid JSON',
+        'Request body must be valid JSON.',
+        rateCheck.remaining
+      );
+    }
+  } else if (path === '/verify') {
+    if (method !== 'POST') {
+      return createErrorResponse(405, 'Method not allowed', 'POST required for /verify', rateCheck.remaining);
+    }
+    targetPath = '/verify';
+    
+    // Payload size limit for verify
+    const contentLength = req.headers.get('content-length');
+    if (contentLength && parseInt(contentLength, 10) > MAX_PAYLOAD_SIZE) {
+      return createErrorResponse(
+        413, 
+        'Payload too large', 
+        `Request body exceeds maximum size of ${MAX_PAYLOAD_SIZE / 1024}KB`,
+        rateCheck.remaining
+      );
+    }
+    
+    body = await req.text();
+    
+    if (body.length > MAX_PAYLOAD_SIZE) {
+      return createErrorResponse(
+        413, 
+        'Payload too large', 
+        `Request body exceeds maximum size of ${MAX_PAYLOAD_SIZE / 1024}KB`,
+        rateCheck.remaining
+      );
+    }
   } else {
-    return new Response(
-      JSON.stringify({ error: 'Not found', message: `Unknown endpoint: ${path}` }),
-      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    // This shouldn't happen due to allowlist check above, but just in case
+    return createErrorResponse(404, 'Not found', `Unknown endpoint: ${path}`);
   }
 
   // Proxy the request
@@ -152,7 +268,7 @@ serve(async (req) => {
       const errorText = await response.text();
       console.error(`[canonical-proxy] Upstream error: ${response.status} - ${errorText}`);
       
-      // Return 502 for upstream errors
+      // Return 502 for upstream server errors
       if (response.status >= 500) {
         return new Response(
           JSON.stringify({ 
@@ -172,7 +288,7 @@ serve(async (req) => {
         );
       }
 
-      // Forward client errors as-is
+      // Forward client errors as-is (400-499)
       return new Response(
         errorText,
         { 

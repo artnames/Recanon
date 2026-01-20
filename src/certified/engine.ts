@@ -71,10 +71,14 @@ export interface CertifiedExecutionResult {
   artifactId: string;
   snapshot: CanonicalSnapshot;
   mode: 'static' | 'loop';
-  imageHash: string;
-  animationHash?: string;
-  outputBase64: string;
-  animationBase64?: string;
+  /** SHA-256 hash of poster/static image */
+  posterHash: string;
+  /** Animation hash (loop mode only) */
+  animationHash: string | null;
+  /** Base64 encoded PNG (static image or poster frame) */
+  posterBase64: string;
+  /** Base64 encoded MP4 (loop mode only) */
+  animationBase64: string | null;
   mimeType: 'image/png' | 'video/mp4';
   sealed: boolean;
   replayCommand: string;
@@ -82,6 +86,12 @@ export interface CertifiedExecutionResult {
   canonicalMetadata: CanonicalMetadata & {
     rendererUrl: string;
   };
+  
+  // Legacy aliases (deprecated)
+  /** @deprecated Use posterHash instead */
+  imageHash: string;
+  /** @deprecated Use posterBase64 instead */
+  outputBase64: string;
 }
 
 export interface DraftExecutionResult {
@@ -191,23 +201,27 @@ export async function runCertifiedBacktest(
 
   // Step 5: Return certified result with canonical metadata
   // Generate unique artifact ID from hash prefix + timestamp
-  const artifactId = `SEALED-${data.imageHash.slice(0, 8).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+  const artifactId = `SEALED-${data.posterHash.slice(0, 8).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
   
   return {
     artifactId,
     snapshot,
     mode: data.mode,
-    imageHash: data.imageHash,
+    // Normalized fields
+    posterHash: data.posterHash,
     animationHash: data.animationHash,
-    outputBase64: data.outputBase64,
+    posterBase64: data.posterBase64,
     animationBase64: data.animationBase64,
     mimeType: data.mode === 'loop' ? 'video/mp4' : 'image/png',
     sealed: true,
-    replayCommand: `curl -X POST ${getCanonicalUrl()}/verify -H "Content-Type: application/json" -d '{"snapshot": ${JSON.stringify(snapshot)}, "expectedHash": "${data.imageHash}"}'`,
+    replayCommand: `curl -X POST ${getCanonicalUrl()}/verify -H "Content-Type: application/json" -d '{"snapshot": ${JSON.stringify(snapshot)}, "expectedHash": "${data.posterHash}"}'`,
     canonicalMetadata: {
       ...data.metadata,
       rendererUrl: getCanonicalUrl(),
     },
+    // Legacy aliases
+    imageHash: data.posterHash,
+    outputBase64: data.posterBase64,
   };
 }
 
