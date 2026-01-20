@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Search, ShieldCheck, AlertTriangle, CheckCircle2, Loader2, Upload, Info, BookOpen, Zap } from "lucide-react";
+import { Search, ShieldCheck, AlertTriangle, CheckCircle2, Loader2, Upload, Info, BookOpen, Zap, ChevronDown } from "lucide-react";
 import { Button } from "./ui/button";
 import { HashDisplay } from "./HashDisplay";
 import { CanonicalRendererStatus } from "./CanonicalHealthBadge";
@@ -7,9 +7,10 @@ import { QuickGuide } from "./QuickGuide";
 import { CLIExamples } from "./CLIExamples";
 import { LiveVerifier } from "./LiveVerifier";
 import { StartHereCard } from "./StartHereCard";
-import { BundleValidator, validateBundle, EXAMPLE_STATIC_BUNDLE } from "./BundleValidator";
+import { BundleValidator, validateBundle, EXAMPLE_STATIC_BUNDLE, resolveExpectedHash, resolveExpectedAnimationHash, formatHashForDisplay } from "./BundleValidator";
 import { RendererErrorDisplay } from "./RendererErrorDisplay";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { 
   verifyCertifiedStatic,
   verifyCertifiedLoop,
@@ -43,6 +44,9 @@ interface VerificationState {
   rendererVersion?: string;
   nodeVersion?: string;
   httpStatus?: number;
+  // Debug info
+  hashSource?: string;
+  animationHashSource?: string;
 }
 
 export function VerifyPanel() {
@@ -78,46 +82,50 @@ export function VerifyPanel() {
       const snapshot: CanonicalSnapshot = bundle.snapshot;
       const isLoop = isLoopMode(snapshot);
 
+      // Use multi-source hash resolution
+      const resolvedHash = resolveExpectedHash(bundle);
+      const resolvedAnimationHash = resolveExpectedAnimationHash(bundle);
+
       let verifyResult: CanonicalVerifyResponse;
 
       if (isLoop) {
         // Loop mode: MUST use both hashes
-        const expectedPosterHash = bundle.expectedImageHash;
-        const expectedAnimationHash = bundle.expectedAnimationHash;
-
-        if (!expectedPosterHash || !expectedAnimationHash) {
+        if (!resolvedHash || !resolvedAnimationHash) {
           setResult({
             status: 'error',
             mode: 'loop',
-            error: 'Loop verification requires both expectedImageHash (poster) and expectedAnimationHash. Cannot verify with only one hash.',
+            error: `Loop verification requires both poster and animation hashes. Missing: ${!resolvedHash ? 'posterHash' : ''} ${!resolvedAnimationHash ? 'animationHash' : ''}`.trim(),
           });
           setIsVerifying(false);
           return;
         }
 
-        verifyResult = await verifyCertifiedLoop(snapshot, expectedPosterHash, expectedAnimationHash);
+        verifyResult = await verifyCertifiedLoop(snapshot, resolvedHash.normalized, resolvedAnimationHash.normalized);
       } else {
-        // Static mode: use single hash
-        const expectedHash = bundle.expectedImageHash || bundle.verification?.imageHash;
-
-        if (!expectedHash) {
+        // Static mode: use single hash from multi-source resolution
+        if (!resolvedHash) {
           setResult({
             status: 'error',
             mode: 'static',
-            error: 'Bundle missing expectedImageHash field.',
+            error: 'Bundle missing expected hash. Looked for: expectedImageHash, baseline.posterHash, baseline.imageHash, poster_hash, posterHash',
           });
           setIsVerifying(false);
           return;
         }
 
-        verifyResult = await verifyCertifiedStatic(snapshot, expectedHash);
+        verifyResult = await verifyCertifiedStatic(snapshot, resolvedHash.normalized);
       }
+
+      const hashSource = resolvedHash?.source;
+      const animationHashSource = resolvedAnimationHash?.source;
 
       if (verifyResult.error) {
         setResult({
           status: 'error',
           mode: verifyResult.mode,
           error: verifyResult.error,
+          hashSource,
+          animationHashSource,
         });
       } else if (verifyResult.verified) {
         setResult({
@@ -143,6 +151,8 @@ export function VerifyPanel() {
           },
           rendererVersion: verifyResult.metadata?.rendererVersion,
           nodeVersion: verifyResult.metadata?.nodeVersion,
+          hashSource,
+          animationHashSource,
         });
       } else {
         setResult({
@@ -165,6 +175,8 @@ export function VerifyPanel() {
           },
           rendererVersion: verifyResult.metadata?.rendererVersion,
           nodeVersion: verifyResult.metadata?.nodeVersion,
+          hashSource,
+          animationHashSource,
         });
       }
     } catch (error) {
@@ -493,6 +505,42 @@ export function VerifyPanel() {
                     <div className="mt-4 pt-4 border-t border-border text-xs text-muted-foreground">
                       Node: {result.nodeVersion}
                     </div>
+                  )}
+
+                  {/* Debug Panel */}
+                  {(result.hashSource || result.animationHashSource) && (
+                    <Collapsible className="mt-4 pt-4 border-t border-border">
+                      <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full">
+                        <ChevronDown className="w-3 h-3" />
+                        <span>Debug: Hash Resolution</span>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="mt-2 space-y-2 text-xs font-mono bg-muted/50 p-3 rounded">
+                        {result.hashSource && (
+                          <div>
+                            <span className="text-muted-foreground">Poster hash source:</span>{' '}
+                            <code className="text-foreground">{result.hashSource}</code>
+                          </div>
+                        )}
+                        {result.animationHashSource && (
+                          <div>
+                            <span className="text-muted-foreground">Animation hash source:</span>{' '}
+                            <code className="text-foreground">{result.animationHashSource}</code>
+                          </div>
+                        )}
+                        {result.originalHash && (
+                          <div>
+                            <span className="text-muted-foreground">Expected (normalized):</span>{' '}
+                            <code className="text-foreground break-all">{result.originalHash}</code>
+                          </div>
+                        )}
+                        {result.computedHash && (
+                          <div>
+                            <span className="text-muted-foreground">Computed:</span>{' '}
+                            <code className="text-foreground break-all">{result.computedHash}</code>
+                          </div>
+                        )}
+                      </CollapsibleContent>
+                    </Collapsible>
                   )}
                 </div>
               )}
