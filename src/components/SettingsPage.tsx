@@ -1,23 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
-import { Settings, Server, ShieldCheck, Info, Copy, Check, RefreshCw, Circle, Pencil, RotateCcw } from "lucide-react";
+import { Settings, Server, ShieldCheck, Info, Copy, Check, RefreshCw, Circle } from "lucide-react";
 import { Button } from "./ui/button";
-import { Input } from "./ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "./ui/dialog";
 import { cn } from "@/lib/utils";
-import { 
-  getCanonicalUrl, 
-  setCanonicalUrl, 
-  clearCanonicalUrl, 
-  hasLocalOverride 
-} from "@/certified/canonicalConfig";
+import { checkCanonicalHealth, isProxyConfigured } from "@/certified/canonicalClient";
 
 const APP_VERSION = 'recanon-app v0.1.0';
 
@@ -53,48 +39,33 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
 }
 
 export function SettingsPage() {
-  const [currentUrl, setCurrentUrl] = useState(getCanonicalUrl());
-  const [isOverride, setIsOverride] = useState(hasLocalOverride());
-  const [editUrl, setEditUrl] = useState('');
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [health, setHealth] = useState<HealthData>({ status: 'idle' });
-
-  const refreshUrl = useCallback(() => {
-    setCurrentUrl(getCanonicalUrl());
-    setIsOverride(hasLocalOverride());
-  }, []);
 
   const testConnection = useCallback(async () => {
     setHealth({ status: 'checking' });
-    const url = getCanonicalUrl();
     const start = performance.now();
 
     try {
-      const response = await fetch(`${url}/health`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      
+      const result = await checkCanonicalHealth();
       const latency = Math.round(performance.now() - start);
 
-      if (response.ok) {
-        const data = await response.json();
+      if (result.available && result.healthData) {
         setHealth({
           status: 'healthy',
           latency,
           metadata: {
-            nodeVersion: data.nodeVersion,
-            sdkVersion: data.sdkVersion,
-            protocolVersion: data.protocolVersion,
-            canvasWidth: data.canvasWidth,
-            canvasHeight: data.canvasHeight,
-            timestamp: data.timestamp,
+            nodeVersion: result.healthData.version,
+            sdkVersion: result.healthData.sdk_version,
+            protocolVersion: result.healthData.protocol_version,
+            canvasWidth: result.healthData.canvas?.width,
+            canvasHeight: result.healthData.canvas?.height,
+            timestamp: result.healthData.timestamp,
           },
         });
       } else {
         setHealth({
           status: 'unreachable',
-          error: `HTTP ${response.status}: ${response.statusText}`,
+          error: result.error || 'Unknown error',
         });
       }
     } catch (error) {
@@ -109,31 +80,11 @@ export function SettingsPage() {
     testConnection();
   }, [testConnection]);
 
-  const handleEdit = () => {
-    setEditUrl(currentUrl);
-    setDialogOpen(true);
-  };
-
-  const handleSave = () => {
-    if (editUrl.trim()) {
-      setCanonicalUrl(editUrl.trim());
-      refreshUrl();
-      setDialogOpen(false);
-      testConnection();
-    }
-  };
-
-  const handleReset = () => {
-    clearCanonicalUrl();
-    refreshUrl();
-    testConnection();
-  };
-
   const getDebugInfo = () => {
     return JSON.stringify({
       appVersion: APP_VERSION,
-      rendererUrl: currentUrl,
-      isOverride,
+      proxyConfigured: isProxyConfigured(),
+      renderer: 'Protected Proxy (hidden)',
       health: {
         status: health.status,
         latency: health.latency,
@@ -168,29 +119,24 @@ export function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* URL Display */}
+          {/* Protected Proxy Display */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium">Active URL</label>
-              {isOverride && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-warning/20 text-warning font-medium">
-                  LOCAL OVERRIDE
-                </span>
-              )}
+              <label className="text-sm font-medium">Endpoint</label>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-verified/20 text-verified font-medium">
+                PROTECTED
+              </span>
             </div>
             <div className="flex items-center gap-2">
-              <code className="flex-1 font-mono text-xs bg-muted px-3 py-2 rounded truncate">
-                {currentUrl}
-              </code>
-              <Button variant="outline" size="icon" onClick={handleEdit} title="Edit URL">
-                <Pencil className="w-4 h-4" />
-              </Button>
-              {isOverride && (
-                <Button variant="outline" size="icon" onClick={handleReset} title="Reset to default">
-                  <RotateCcw className="w-4 h-4" />
-                </Button>
-              )}
+              <div className="flex items-center gap-2 flex-1 font-mono text-xs bg-muted px-3 py-2 rounded">
+                <ShieldCheck className="w-4 h-4 text-verified" />
+                <span>Protected Proxy</span>
+                <span className="text-muted-foreground">(Renderer: hidden)</span>
+              </div>
             </div>
+            <p className="text-xs text-muted-foreground">
+              The actual renderer URL is kept secret. All requests go through the secure proxy with rate limiting.
+            </p>
           </div>
 
           {/* Health Status */}
@@ -283,9 +229,10 @@ export function SettingsPage() {
               </div>
             </div>
             <div className="p-3 rounded-md border border-border space-y-2">
-              <p><strong>No fallback:</strong> If the Canonical Renderer is unreachable, execution fails. No local mock.</p>
+              <p><strong>No fallback:</strong> If the proxy is unreachable, execution fails. No local mock.</p>
               <p><strong>No client-side verification:</strong> All hash comparisons happen on the authoritative server.</p>
               <p><strong>Any mismatch = FAILED:</strong> Even a single bit difference results in verification failure.</p>
+              <p><strong>Rate limited:</strong> 30 requests per minute per IP to prevent abuse.</p>
             </div>
           </div>
         </CardContent>
@@ -303,40 +250,14 @@ export function SettingsPage() {
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div className="text-muted-foreground">Version</div>
             <div className="font-mono">{APP_VERSION}</div>
+            <div className="text-muted-foreground">Proxy Configured</div>
+            <div className="font-mono">{isProxyConfigured() ? 'Yes' : 'No'}</div>
           </div>
           <div className="pt-2">
             <CopyButton text={getDebugInfo()} label="Copy Debug Info" />
           </div>
         </CardContent>
       </Card>
-
-      {/* Edit URL Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Canonical Renderer URL</DialogTitle>
-            <DialogDescription>
-              Set a custom URL for the canonical renderer. This is stored in localStorage.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Input
-              value={editUrl}
-              onChange={(e) => setEditUrl(e.target.value)}
-              placeholder="https://your-renderer.example.com"
-              className="font-mono text-sm"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave}>
-              Save & Reconnect
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
