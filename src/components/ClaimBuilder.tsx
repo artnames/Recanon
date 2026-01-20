@@ -352,12 +352,19 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
         execution: isLoopMode ? { frames: 60, loop: true } : { frames: 1, loop: false },
       };
 
+      // Extract claimString from generated code and compute hash for debugging
+      const claimStringMatch = snapshot.code.match(/claimString = "([^"]+)"/);
+      const claimString = claimStringMatch?.[1] || '';
+      const claimStringHash = claimString.split('').reduce((h, c) => ((h << 5) - h) + c.charCodeAt(0), 0) & 0x7fffffff;
+
       // Debug log for snapshot
       console.log('[ClaimBuilder] Sealing snapshot:', {
         seed: snapshot.seed,
         vars: snapshot.vars,
         codeLength: snapshot.code.length,
-        codePreview: snapshot.code.slice(0, 100),
+        codePreview: snapshot.code.slice(0, 80),
+        claimStringHash: claimStringHash.toString(16).toUpperCase(),
+        claimStringPreview: claimString.slice(0, 60),
       });
 
       const response = await renderCertified(snapshot);
@@ -1259,10 +1266,27 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
                     savedClaimId={savedClaimId}
                     saveError={saveError}
                     saveErrorDetails={saveErrorDetails}
+                    snapshotDebug={{
+                      codeLength: generatedCode.length,
+                      seed,
+                      vars,
+                      codePreview: generatedCode.slice(0, 120),
+                      claimStringPreview: generatedCode.match(/claimString = "([^"]+)"/)?.[1]?.slice(0, 120) || 'N/A',
+                    }}
                     onOpenInLibrary={handleOpenInLibrary}
                     onDownloadBundle={handleDownload}
                     onCheckNow={handleCheckNow}
                     onRetrySave={handleRetrySave}
+                    onCopySnapshot={() => {
+                      const snapshot = {
+                        code: generatedCode,
+                        seed,
+                        vars,
+                        execution: isLoopMode ? { frames: 60, loop: true } : { frames: 1, loop: false },
+                      };
+                      navigator.clipboard.writeText(JSON.stringify(snapshot, null, 2));
+                      toast.success('Snapshot JSON copied');
+                    }}
                   />
                 )}
 
