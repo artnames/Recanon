@@ -61,6 +61,22 @@ interface LibraryViewProps {
 
 type VerifyStatus = 'idle' | 'checking' | 'passed' | 'failed' | 'error';
 
+interface VerifyDebugInfo {
+  expectedPosterHash: string;
+  expectedPosterSource: string;
+  expectedAnimationHash: string | null;
+  expectedAnimationSource: string | null;
+  computedPosterHash: string | null;
+  computedAnimationHash: string | null;
+  failureReason: string | null;
+}
+
+// Normalize hash: strip sha256: prefix and lowercase
+function normalizeHashForComparison(hash: string | null | undefined): string | null {
+  if (!hash) return null;
+  return hash.replace(/^sha256:/i, '').toLowerCase();
+}
+
 export function LibraryView({ initialClaimId, initialHash, onNavigateToCreate }: LibraryViewProps) {
   // List state
   const [allClaims, setAllClaims] = useState<SealedClaimRow[]>([]);
@@ -74,6 +90,7 @@ export function LibraryView({ initialClaimId, initialHash, onNavigateToCreate }:
   const [verifyStatus, setVerifyStatus] = useState<VerifyStatus>('idle');
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(null);
+  const [verifyDebug, setVerifyDebug] = useState<VerifyDebugInfo | null>(null);
   
   // Not found state (for deep links)
   const [notFound, setNotFound] = useState<{ type: 'id' | 'hash'; value: string } | null>(null);
@@ -193,6 +210,7 @@ export function LibraryView({ initialClaimId, initialHash, onNavigateToCreate }:
     setVerifyStatus('idle');
     setVerifyError(null);
     setLastCheckedAt(null);
+    setVerifyDebug(null);
     setNotFound(null);
   };
 
@@ -201,43 +219,126 @@ export function LibraryView({ initialClaimId, initialHash, onNavigateToCreate }:
     setSelectedClaim(null);
     setVerifyStatus('idle');
     setVerifyError(null);
+    setVerifyDebug(null);
     setNotFound(null);
   };
 
-  // Check now (verify)
+  // Check now (verify) - builds inputs ONLY from saved record
   const handleCheckNow = async () => {
     if (!selectedClaim) return;
     
     const bundle = selectedClaim.bundle_json as ClaimBundle;
     const snapshot = bundle.snapshot;
+    const isLoop = selectedClaim.mode === 'loop';
+    
+    // Build expected hashes from saved record (bundle.baseline preferred, fallback to row columns)
+    const expectedPosterHash = bundle.baseline?.posterHash ?? selectedClaim.poster_hash;
+    const expectedPosterSource = bundle.baseline?.posterHash ? 'bundle.baseline.posterHash' : 'row.poster_hash';
+    const expectedAnimationHash = isLoop 
+      ? (bundle.baseline?.animationHash ?? selectedClaim.animation_hash ?? null)
+      : null;
+    const expectedAnimationSource = isLoop
+      ? (bundle.baseline?.animationHash ? 'bundle.baseline.animationHash' : 'row.animation_hash')
+      : null;
+    
+    // Initialize debug info
+    const debug: VerifyDebugInfo = {
+      expectedPosterHash,
+      expectedPosterSource,
+      expectedAnimationHash,
+      expectedAnimationSource,
+      computedPosterHash: null,
+      computedAnimationHash: null,
+      failureReason: null,
+    };
     
     setVerifyStatus('checking');
     setVerifyError(null);
+    setVerifyDebug(debug);
+
+    // Validate we have baseline hashes
+    if (!expectedPosterHash) {
+      debug.failureReason = 'Missing baseline hash (no poster hash found in saved record)';
+      setVerifyDebug({ ...debug });
+      setVerifyStatus('failed');
+      setVerifyError(debug.failureReason);
+      toast.error('Verification failed', { description: debug.failureReason });
+      return;
+    }
+    
+    if (isLoop && !expectedAnimationHash) {
+      debug.failureReason = 'Loop mode requires animation hash but none found in saved record';
+      setVerifyDebug({ ...debug });
+      setVerifyStatus('failed');
+      setVerifyError(debug.failureReason);
+      toast.error('Verification failed', { description: debug.failureReason });
+      return;
+    }
 
     try {
-      const isLoop = bundle.mode === 'loop';
+      // Normalize expected hashes for comparison
+      const normalizedExpectedPoster = normalizeHashForComparison(expectedPosterHash);
+      const normalizedExpectedAnimation = normalizeHashForComparison(expectedAnimationHash);
       
+      // Call appropriate verify function
       const response = await verifyCertified(
         snapshot,
-        bundle.baseline.posterHash,
-        isLoop ? bundle.baseline.animationHash || undefined : undefined
+        expectedPosterHash,
+        isLoop && expectedAnimationHash ? expectedAnimationHash : undefined
       );
 
       setLastCheckedAt(new Date().toISOString());
+      
+      // Extract computed hashes from response based on mode
+      if (isLoop) {
+        debug.computedPosterHash = response.computedPosterHash || null;
+        debug.computedAnimationHash = response.computedAnimationHash || null;
+      } else {
+        debug.computedPosterHash = response.computedHash || null;
+        debug.computedAnimationHash = null;
+      }
+      
+      // Normalize computed hashes
+      const normalizedComputedPoster = normalizeHashForComparison(debug.computedPosterHash);
+      const normalizedComputedAnimation = normalizeHashForComparison(debug.computedAnimationHash);
 
-      if (response.verified) {
+      // Check for missing computed hashes
+      if (!normalizedComputedPoster) {
+        debug.failureReason = 'Computed hash missing (client parsing issue - renderer may not have returned posterHash)';
+        setVerifyDebug({ ...debug });
+        setVerifyStatus('failed');
+        setVerifyError(debug.failureReason);
+        toast.error('Verification failed', { description: debug.failureReason });
+        return;
+      }
+      
+      // Compare hashes
+      const posterMatch = normalizedExpectedPoster === normalizedComputedPoster;
+      const animationMatch = !isLoop || normalizedExpectedAnimation === normalizedComputedAnimation;
+
+      if (posterMatch && animationMatch) {
+        setVerifyDebug({ ...debug });
         setVerifyStatus('passed');
         toast.success('Verification passed!', {
           description: 'Hashes match. This claim is intact.',
         });
       } else {
+        // Determine failure reason
+        if (!posterMatch) {
+          debug.failureReason = `Hash mismatch: expected poster ${normalizedExpectedPoster?.slice(0, 16)}... but computed ${normalizedComputedPoster?.slice(0, 16)}... (inputs changed or wrong snapshot loaded)`;
+        } else if (!animationMatch) {
+          debug.failureReason = `Hash mismatch: expected animation ${normalizedExpectedAnimation?.slice(0, 16)}... but computed ${normalizedComputedAnimation?.slice(0, 16)}...`;
+        }
+        setVerifyDebug({ ...debug });
         setVerifyStatus('failed');
         toast.error('Verification failed', {
-          description: 'Hashes do not match. Claim may have been tampered.',
+          description: debug.failureReason || 'Hashes do not match.',
         });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
+      debug.failureReason = `Verification request failed: ${message}`;
+      setVerifyDebug({ ...debug });
       setVerifyStatus('error');
       setVerifyError(message);
       toast.error('Check failed', { description: message });
@@ -480,6 +581,78 @@ export function LibraryView({ initialClaimId, initialHash, onNavigateToCreate }:
               <p className="text-xs text-muted-foreground">
                 Last checked: {new Date(lastCheckedAt).toLocaleString()}
               </p>
+            )}
+
+            {/* Debug Info Panel - Always show after check */}
+            {verifyDebug && (
+              <div className="mt-4 p-4 bg-muted/30 rounded-lg space-y-3 text-xs font-mono">
+                <div className="text-sm font-semibold text-foreground mb-2 font-sans">
+                  Verification Debug
+                </div>
+                
+                {/* Expected Poster Hash */}
+                <div className="space-y-1">
+                  <div className="text-muted-foreground">
+                    Expected poster hash <span className="text-primary">(source: {verifyDebug.expectedPosterSource})</span>
+                  </div>
+                  <code className="block break-all bg-muted p-2 rounded">
+                    {verifyDebug.expectedPosterHash || '(none)'}
+                  </code>
+                </div>
+                
+                {/* Computed Poster Hash */}
+                <div className="space-y-1">
+                  <div className="text-muted-foreground">Computed poster hash</div>
+                  <code className={`block break-all p-2 rounded ${
+                    verifyDebug.computedPosterHash && 
+                    normalizeHashForComparison(verifyDebug.expectedPosterHash) === normalizeHashForComparison(verifyDebug.computedPosterHash)
+                      ? 'bg-verified/20 text-verified'
+                      : verifyDebug.computedPosterHash 
+                        ? 'bg-destructive/20 text-destructive'
+                        : 'bg-muted'
+                  }`}>
+                    {verifyDebug.computedPosterHash || '(not returned)'}
+                  </code>
+                </div>
+                
+                {/* Loop mode: Animation hashes */}
+                {selectedClaim.mode === 'loop' && (
+                  <>
+                    <div className="space-y-1 pt-2 border-t border-border">
+                      <div className="text-muted-foreground">
+                        Expected animation hash <span className="text-primary">(source: {verifyDebug.expectedAnimationSource})</span>
+                      </div>
+                      <code className="block break-all bg-muted p-2 rounded">
+                        {verifyDebug.expectedAnimationHash || '(none)'}
+                      </code>
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <div className="text-muted-foreground">Computed animation hash</div>
+                      <code className={`block break-all p-2 rounded ${
+                        verifyDebug.computedAnimationHash && 
+                        normalizeHashForComparison(verifyDebug.expectedAnimationHash) === normalizeHashForComparison(verifyDebug.computedAnimationHash)
+                          ? 'bg-verified/20 text-verified'
+                          : verifyDebug.computedAnimationHash 
+                            ? 'bg-destructive/20 text-destructive'
+                            : 'bg-muted'
+                      }`}>
+                        {verifyDebug.computedAnimationHash || '(not returned)'}
+                      </code>
+                    </div>
+                  </>
+                )}
+                
+                {/* Failure reason */}
+                {verifyDebug.failureReason && (
+                  <div className="pt-2 border-t border-border">
+                    <div className="flex items-start gap-2 text-destructive">
+                      <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                      <span className="font-sans text-sm">{verifyDebug.failureReason}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>
