@@ -95,6 +95,10 @@ export function LibraryView({ initialClaimId, initialHash, onNavigateToCreate }:
   // Not found state (for deep links)
   const [notFound, setNotFound] = useState<{ type: 'id' | 'hash'; value: string } | null>(null);
 
+  // "Open by Hash" state (must be before any early returns)
+  const [openByHashInput, setOpenByHashInput] = useState('');
+  const [isLoadingHash, setIsLoadingHash] = useState(false);
+
   // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -696,6 +700,38 @@ export function LibraryView({ initialClaimId, initialHash, onNavigateToCreate }:
     );
   }
 
+  // Handle "Open by Hash" submission
+  const handleOpenByHash = async () => {
+    const input = openByHashInput.trim();
+    if (!input) return;
+    
+    // Normalize: strip sha256: prefix if present
+    const normalizedHash = input.replace(/^sha256:/i, '');
+    
+    // Check if it looks like a hex hash (32-64 chars)
+    if (!/^[a-fA-F0-9]{16,64}$/.test(normalizedHash)) {
+      toast.error('Invalid hash format', { description: 'Enter a valid hex hash (16-64 characters)' });
+      return;
+    }
+    
+    setIsLoadingHash(true);
+    try {
+      const claim = await getSealedClaimByHash(normalizedHash);
+      if (claim) {
+        setSelectedClaim(claim);
+        setOpenByHashInput('');
+        toast.success('Claim found!');
+      } else {
+        toast.error('No claim found', { description: 'No sealed claim matches this hash' });
+      }
+    } catch (error) {
+      console.error('Failed to lookup hash:', error);
+      toast.error('Lookup failed');
+    } finally {
+      setIsLoadingHash(false);
+    }
+  };
+
   // Render list view
   return (
     <div className="space-y-6">
@@ -706,6 +742,37 @@ export function LibraryView({ initialClaimId, initialHash, onNavigateToCreate }:
           Browse and verify sealed claims from the registry.
         </p>
       </div>
+
+      {/* Open by Hash */}
+      <Card className="bg-muted/30">
+        <CardContent className="py-3 px-4">
+          <div className="flex items-center gap-3">
+            <Hash className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <Input
+              placeholder="Open by hash… (paste sha256:abc123 or raw hex)"
+              value={openByHashInput}
+              onChange={(e) => setOpenByHashInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleOpenByHash()}
+              className="flex-1 h-9"
+            />
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleOpenByHash}
+              disabled={isLoadingHash || !openByHashInput.trim()}
+            >
+              {isLoadingHash ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <ExternalLink className="w-4 h-4 mr-1" />
+                  Open
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Search */}
       <div className="space-y-3">

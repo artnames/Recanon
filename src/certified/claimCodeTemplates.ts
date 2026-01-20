@@ -55,6 +55,16 @@ const FINGERPRINT_HASH_FUNCTION = `
     textAlign(LEFT);
     text('FINGERPRINT: ' + baseHash.toString(16).toUpperCase().padStart(8, '0'), 100, y + stripHeight + 12);
   }
+  
+  // Draw visible claim watermark at bottom margin - guarantees different pixels for different claims
+  function drawClaimWatermark(claimString, y) {
+    const truncated = claimString.slice(0, 48);
+    fill(50, 50, 65);
+    textFont('monospace');
+    textSize(11);
+    textAlign(LEFT, TOP);
+    text('CLAIM: ' + truncated, 100, y);
+  }
 `;
 
 /**
@@ -195,6 +205,9 @@ function draw() {
 
   // Fingerprint strip
   drawFingerprintStrip(claimString, height - 130, 20);
+
+  // Claim watermark - visible text that changes with claim content
+  drawClaimWatermark(claimString, height - 95);
 
   // Footer
   fill(60, 60, 70);
@@ -388,6 +401,9 @@ function draw() {
 
   // Fingerprint strip
   drawFingerprintStrip(claimString, height - 180, 20);
+
+  // Claim watermark - visible text that changes with claim content
+  drawClaimWatermark(claimString, height - 145);
 
   // Footer
   fill(60, 60, 70);
@@ -628,6 +644,9 @@ function draw() {
 
   // Fingerprint strip
   drawFingerprintStrip(claimString, height - 150, 20);
+
+  // Claim watermark - visible text that changes with claim content
+  drawClaimWatermark(claimString, height - 115);
 
   // Footer
   fill(60, 60, 70);

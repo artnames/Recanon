@@ -40,6 +40,14 @@ import {
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 
+interface SnapshotDebugInfo {
+  codeLength: number;
+  seed: number;
+  vars: number[];
+  codePreview: string;
+  claimStringPreview: string;
+}
+
 interface SealedResultCardProps {
   posterHash: string;
   animationHash: string | null;
@@ -48,10 +56,12 @@ interface SealedResultCardProps {
   savedClaimId: string | null;
   saveError: string | null;
   saveErrorDetails?: string | null;
+  snapshotDebug?: SnapshotDebugInfo | null;
   onOpenInLibrary: () => void;
   onDownloadBundle: () => void;
   onCheckNow: () => void;
   onRetrySave?: () => void;
+  onCopySnapshot?: () => void;
 }
 
 export function SealedResultCard({
@@ -62,10 +72,12 @@ export function SealedResultCard({
   savedClaimId,
   saveError,
   saveErrorDetails,
+  snapshotDebug,
   onOpenInLibrary,
   onDownloadBundle,
   onCheckNow,
   onRetrySave,
+  onCopySnapshot,
 }: SealedResultCardProps) {
   const { signUp, signIn } = useAuth();
   const [email, setEmail] = useState('');
@@ -192,6 +204,45 @@ export function SealedResultCard({
               {animationHash}
             </code>
           </div>
+        )}
+
+        {/* Snapshot Debug Panel */}
+        {snapshotDebug && (
+          <Collapsible>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="w-full justify-start text-xs text-muted-foreground gap-1">
+                <ChevronDown className="w-3 h-3" />
+                Snapshot Debug
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="p-3 bg-muted/50 rounded-lg text-xs font-mono space-y-1.5 mt-1">
+                <div className="flex items-center justify-between">
+                  <span><span className="text-muted-foreground">codeLength:</span> {snapshotDebug.codeLength}</span>
+                  {onCopySnapshot && (
+                    <Button variant="ghost" size="sm" onClick={onCopySnapshot} className="h-6 px-2 text-xs">
+                      <Copy className="w-3 h-3 mr-1" />
+                      Copy Snapshot
+                    </Button>
+                  )}
+                </div>
+                <div><span className="text-muted-foreground">seed:</span> {snapshotDebug.seed}</div>
+                <div><span className="text-muted-foreground">vars:</span> [{snapshotDebug.vars.join(', ')}]</div>
+                <div className="pt-1 border-t border-border/50">
+                  <span className="text-muted-foreground">codePreview:</span>
+                  <div className="bg-muted p-1.5 rounded text-[10px] mt-1 max-h-16 overflow-auto break-all">
+                    {snapshotDebug.codePreview}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">claimString:</span>
+                  <div className="bg-muted p-1.5 rounded text-[10px] mt-1 break-all">
+                    {snapshotDebug.claimStringPreview}
+                  </div>
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         )}
 
         {/* Save Status */}
