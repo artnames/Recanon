@@ -3,6 +3,11 @@
  * 
  * Turns any real-world claim into a sealed, replayable, verifiable artifact.
  * Supports multiple claim types: Sports, P&L, and Generic statements.
+ * 
+ * Key principles:
+ * - Seal always uses a freshly-built snapshot (no stale closures)
+ * - Auto-randomize seed/vars on new claim (default ON)
+ * - Payload proof panel for debugging
  */
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -76,6 +81,14 @@ import { toast } from 'sonner';
 import { SPORTS_EXAMPLE, PNL_EXAMPLE } from '@/data/claimExamples';
 import { SealedResultCard } from './SealedResultCard';
 import { normalizeSha256 } from '@/api/claims';
+import { PayloadProofPanel } from './PayloadProofPanel';
+import { UniquenessPolicy } from './UniquenessPolicy';
+import { 
+  generateSecureRandomSeed, 
+  generateSecureRandomVars, 
+  generateNewClaimId,
+  computePayloadFingerprint,
+} from '@/lib/crypto';
 
 interface ClaimBuilderProps {
   className?: string;
@@ -103,11 +116,18 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
   // Step 2: Evidence Sources
   const [sources, setSources] = useState<ClaimSource[]>([]);
   
-  // Step 3: Execution Settings
-  const [seed, setSeed] = useState(12345);
+  // Step 3: Execution Settings - Initialize with random values
+  const [seed, setSeed] = useState(() => generateSecureRandomSeed());
   const [isLoopMode, setIsLoopMode] = useState(false);
-  const [vars, setVars] = useState<number[]>([50, 50, 50, 50, 50, 50, 50, 50, 50, 50]);
+  const [vars, setVars] = useState<number[]>(() => generateSecureRandomVars());
   const [showAdvanced, setShowAdvanced] = useState(false);
+  
+  // Uniqueness policy
+  const [autoRandomize, setAutoRandomize] = useState(true);
+  const [newClaimId, setNewClaimId] = useState(() => generateNewClaimId());
+  
+  // Track last payload fingerprint for cache warning detection
+  const [lastPayloadFingerprint, setLastPayloadFingerprint] = useState<string | null>(null);
   
   // Sealing state
   const [isSealing, setIsSealing] = useState(false);
@@ -127,32 +147,44 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
     }
   }, [prefillExample, onExampleConsumed]);
 
-  // Load example data
+  // Load example data - auto-randomize if policy is ON
   const loadExample = useCallback((type: ClaimType) => {
     setSealResult(null);
     setSealError(null);
     setCurrentStep(3); // Jump to execution step after loading
     
+    // Auto-randomize if policy is ON
+    if (autoRandomize) {
+      setSeed(generateSecureRandomSeed());
+      setVars(generateSecureRandomVars());
+      setNewClaimId(generateNewClaimId());
+    }
+    
     if (type === 'sports') {
       setClaimType('sports');
       setSportsDetails(SPORTS_EXAMPLE.details);
       setSources(SPORTS_EXAMPLE.sources);
-      setSeed(SPORTS_EXAMPLE.seed);
-      setVars(SPORTS_EXAMPLE.vars);
+      // Only use example seed/vars if NOT auto-randomizing
+      if (!autoRandomize) {
+        setSeed(SPORTS_EXAMPLE.seed);
+        setVars(SPORTS_EXAMPLE.vars);
+      }
       toast.success('Sports example loaded', {
-        description: 'Click "Seal Claim" to generate your first bundle.',
+        description: autoRandomize ? 'Seed/vars randomized for uniqueness.' : 'Click "Seal Claim" to generate your first bundle.',
       });
     } else if (type === 'pnl') {
       setClaimType('pnl');
       setPnlDetails(PNL_EXAMPLE.details);
       setSources(PNL_EXAMPLE.sources);
-      setSeed(PNL_EXAMPLE.seed);
-      setVars(PNL_EXAMPLE.vars);
+      if (!autoRandomize) {
+        setSeed(PNL_EXAMPLE.seed);
+        setVars(PNL_EXAMPLE.vars);
+      }
       toast.success('P&L example loaded', {
-        description: 'Click "Seal Claim" to generate your first bundle.',
+        description: autoRandomize ? 'Seed/vars randomized for uniqueness.' : 'Click "Seal Claim" to generate your first bundle.',
       });
     }
-  }, []);
+  }, [autoRandomize]);
 
   // Computed P&L metrics
   const pnlMetrics = useMemo(() => {
@@ -340,8 +372,8 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
     execution: { frames: number; loop: boolean };
   } | null>(null);
 
-  // Seal the claim
-  const handleSeal = useCallback(async () => {
+  // Seal the claim - ALWAYS builds snapshot fresh at click-time (no stale closures)
+  const handleSeal = async () => {
     if (!canSeal) return;
     
     setIsSealing(true);
@@ -385,7 +417,10 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
       };
 
       setLastSealedSnapshot(snapshot);
-
+      
+      // Compute and store payload fingerprint for cache warning detection
+      const fingerprint = await computePayloadFingerprint(codeAtSeal, seed, vars, isLoopMode);
+      
       // Extract claimString from generated code and compute hash for debugging
       const claimStringMatch = snapshot.code.match(/claimString = "([^"]+)"/);
       const claimString = claimStringMatch?.[1] || '';
@@ -399,6 +434,8 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
         codePreview: snapshot.code.slice(0, 80),
         claimStringHash: claimStringHash.toString(16).toUpperCase(),
         claimStringPreview: claimString.slice(0, 60),
+        payloadFingerprint: fingerprint,
+        newClaimId,
       });
 
       const response = await renderCertified(snapshot);
@@ -429,6 +466,18 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
         };
       }
       
+      // Check for cache warning: fingerprint changed but hash is same as before
+      if (lastPayloadFingerprint && lastPayloadFingerprint !== fingerprint) {
+        // We had a different fingerprint before - now check if hash changed
+        if (sealResult && sealResult.posterHash === sealedResult.posterHash) {
+          console.warn('[ClaimBuilder] Cache warning: payload fingerprint changed but posterHash is identical!');
+          toast.warning('Possible caching detected', {
+            description: 'Payload changed but hash is identical. Renderer may be caching.',
+          });
+        }
+      }
+      
+      setLastPayloadFingerprint(fingerprint);
       setSealResult(sealedResult);
       toast.success('Claim sealed successfully!');
 
@@ -503,7 +552,7 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
     } finally {
       setIsSealing(false);
     }
-  }, [canSeal, generatedCode, seed, vars, isLoopMode, bundle]);
+  };
 
   // Download JSON
   const handleDownload = () => {
@@ -521,21 +570,31 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
     }
   };
 
-  // Reset
+  // Reset - auto-randomize if policy is ON
   const handleReset = () => {
     setClaimType('generic');
     setGenericDetails(createEmptyGenericDetails());
     setSportsDetails(createEmptySportsDetails());
     setPnlDetails(createEmptyPnlDetails());
     setSources([]);
-    setSeed(12345);
     setIsLoopMode(false);
-    setVars([50, 50, 50, 50, 50, 50, 50, 50, 50, 50]);
     setSealResult(null);
     setSealError(null);
     setPendingBundle(null);
     setCurrentStep(1);
-    toast.info('Builder reset');
+    setLastPayloadFingerprint(null);
+    
+    // Apply uniqueness policy
+    if (autoRandomize) {
+      setSeed(generateSecureRandomSeed());
+      setVars(generateSecureRandomVars());
+      setNewClaimId(generateNewClaimId());
+      toast.info('Builder reset with new seed/vars');
+    } else {
+      setSeed(12345);
+      setVars([50, 50, 50, 50, 50, 50, 50, 50, 50, 50]);
+      toast.info('Builder reset');
+    }
   };
 
   // Retry save after authentication
@@ -612,11 +671,37 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
     }
   }, [savedClaimId, onNavigateToLibrary]);
 
-  // Handle claim type change
+  // Handle claim type change - auto-randomize if policy is ON
   const handleClaimTypeChange = (type: ClaimType) => {
     setClaimType(type);
     setSealResult(null);
     setSealError(null);
+    
+    // Apply uniqueness policy on type change
+    if (autoRandomize) {
+      setSeed(generateSecureRandomSeed());
+      setVars(generateSecureRandomVars());
+      setNewClaimId(generateNewClaimId());
+    }
+  };
+  
+  // Handle randomize now (from UniquenessPolicy component)
+  const handleRandomizeNow = (newSeed: number, newVars: number[]) => {
+    setSeed(newSeed);
+    setVars(newVars);
+    setNewClaimId(generateNewClaimId());
+  };
+  
+  // Handle reset to defaults (from UniquenessPolicy component)
+  const handleResetToDefaults = () => {
+    if (autoRandomize) {
+      setSeed(generateSecureRandomSeed());
+      setVars(generateSecureRandomVars());
+      setNewClaimId(generateNewClaimId());
+    } else {
+      setSeed(12345);
+      setVars([50, 50, 50, 50, 50, 50, 50, 50, 50, 50]);
+    }
   };
 
   return (
@@ -1195,6 +1280,16 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Uniqueness Policy */}
+                <UniquenessPolicy
+                  autoRandomize={autoRandomize}
+                  onAutoRandomizeChange={setAutoRandomize}
+                  onRandomizeNow={handleRandomizeNow}
+                  onResetToDefaults={handleResetToDefaults}
+                  seed={seed}
+                  vars={vars}
+                />
+                
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="seed">Seed *</Label>
@@ -1206,20 +1301,36 @@ export function ClaimBuilder({ className, prefillExample, onExampleConsumed, onN
                         onChange={(e) => setSeed(parseInt(e.target.value) || 0)}
                         className="flex-1"
                       />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSeed(Math.floor(Math.random() * 1e9))}
-                        title="Generate random seed"
-                      >
-                        🎲
-                      </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Seeds random() and noise() for determinism. Click 🎲 to randomize.
+                      Seeds random() and noise() for determinism.
                     </p>
                   </div>
+
+                  <div className="space-y-2">
+                    <Label>Mode</Label>
+                    <div className="flex items-center gap-3 mt-1">
+                      <Switch
+                        checked={isLoopMode}
+                        onCheckedChange={setIsLoopMode}
+                      />
+                      <span className="text-sm">
+                        {isLoopMode ? 'Loop (60 frames, MP4)' : 'Static (PNG)'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Payload Proof Panel */}
+                <PayloadProofPanel
+                  code={generatedCode}
+                  seed={seed}
+                  vars={vars}
+                  loop={isLoopMode}
+                  claimData={currentDetails}
+                  lastPosterHash={sealResult?.posterHash}
+                  lastPayloadFingerprint={lastPayloadFingerprint}
+                />
 
                   <div className="space-y-2">
                     <Label>Mode</Label>
