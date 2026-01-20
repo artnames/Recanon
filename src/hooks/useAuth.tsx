@@ -10,8 +10,8 @@ interface UseAuthReturn {
   user: User | null;
   session: Session | null;
   isLoading: boolean;
-  signInWithMagicLink: (email: string) => Promise<{ error: Error | null }>;
-  signInWithGoogle: () => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -40,11 +40,12 @@ export function useAuth(): UseAuthReturn {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signInWithMagicLink = useCallback(async (email: string) => {
+  const signUp = useCallback(async (email: string, password: string) => {
     const redirectUrl = `${window.location.origin}/`;
     
-    const { error } = await supabase.auth.signInWithOtp({
+    const { error } = await supabase.auth.signUp({
       email,
+      password,
       options: {
         emailRedirectTo: redirectUrl
       }
@@ -53,14 +54,10 @@ export function useAuth(): UseAuthReturn {
     return { error: error as Error | null };
   }, []);
 
-  const signInWithGoogle = useCallback(async () => {
-    const redirectUrl = `${window.location.origin}/`;
-    
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: redirectUrl
-      }
+  const signIn = useCallback(async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
     });
     
     return { error: error as Error | null };
@@ -74,8 +71,8 @@ export function useAuth(): UseAuthReturn {
     user,
     session,
     isLoading,
-    signInWithMagicLink,
-    signInWithGoogle,
+    signUp,
+    signIn,
     signOut,
   };
 }
