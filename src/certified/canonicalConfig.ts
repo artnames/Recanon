@@ -1,51 +1,61 @@
 /**
- * Canonical Renderer URL Configuration
+ * Canonical Renderer Proxy Configuration
  * 
- * Resolution order:
- * 1. localStorage override (for runtime debugging/testing)
- * 2. VITE_CANONICAL_RENDERER_URL env var (if set and non-empty)
- * 3. Default Railway production URL
+ * The browser NEVER calls the renderer directly.
+ * All requests go through the secure proxy edge function.
  * 
- * NO localhost fallback - hosted preview cannot reach localhost.
+ * The proxy URL is constructed from the Supabase project URL.
  */
+
+/**
+ * Get the proxy base URL for canonical renderer requests
+ * Uses the Supabase edge function proxy
+ */
+export function getProxyUrl(): string {
+  // Use the Supabase project URL to construct the edge function URL
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  
+  if (supabaseUrl) {
+    // Transform project URL to functions URL
+    // e.g., https://fejsrcbbqxlopelhihmk.supabase.co -> https://fejsrcbbqxlopelhihmk.supabase.co/functions/v1/canonical-proxy
+    return `${supabaseUrl}/functions/v1/canonical-proxy`;
+  }
+  
+  // Fallback for development without Supabase
+  console.warn('[Canonical Config] VITE_SUPABASE_URL not set, using hardcoded proxy URL');
+  return 'https://fejsrcbbqxlopelhihmk.supabase.co/functions/v1/canonical-proxy';
+}
+
+/**
+ * Check if proxy is configured
+ */
+export function isProxyConfigured(): boolean {
+  return !!import.meta.env.VITE_SUPABASE_URL;
+}
+
+// ============================================================
+// DEPRECATED: These functions are no longer used
+// The renderer URL is now hidden behind the proxy
+// ============================================================
 
 const STORAGE_KEY = 'canonical_renderer_url';
-const DEFAULT_CANONICAL_URL = 'https://nexart-canonical-renderer-production.up.railway.app';
 
 /**
- * Get the resolved canonical renderer URL
- * Priority: localStorage > env var > default Railway URL
+ * @deprecated No longer used - renderer URL is hidden
  */
 export function getCanonicalUrl(): string {
-  // 1. Check localStorage override
-  if (typeof window !== 'undefined') {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored && stored.trim()) {
-      return stored.trim();
-    }
-  }
-
-  // 2. Check env var
-  const envUrl = import.meta.env.VITE_CANONICAL_RENDERER_URL;
-  if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
-    return envUrl.trim();
-  }
-
-  // 3. Default to Railway production URL
-  return DEFAULT_CANONICAL_URL;
+  return getProxyUrl();
 }
 
 /**
- * Set a runtime override for the canonical URL (stored in localStorage)
+ * @deprecated No longer used - cannot override proxy
  */
-export function setCanonicalUrl(url: string): void {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, url.trim());
-  }
+export function setCanonicalUrl(_url: string): void {
+  console.warn('[Canonical Config] setCanonicalUrl is deprecated. The renderer URL is now protected behind a proxy.');
 }
 
 /**
- * Clear the localStorage override, reverting to env var or default
+ * @deprecated No longer used
  */
 export function clearCanonicalUrl(): void {
   if (typeof window !== 'undefined') {
@@ -54,19 +64,15 @@ export function clearCanonicalUrl(): void {
 }
 
 /**
- * Check if a localStorage override is currently active
+ * @deprecated Always returns false - no local override possible
  */
 export function hasLocalOverride(): boolean {
-  if (typeof window !== 'undefined') {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return !!(stored && stored.trim());
-  }
   return false;
 }
 
 /**
- * Get the default URL (for display purposes)
+ * @deprecated No longer used
  */
 export function getDefaultCanonicalUrl(): string {
-  return DEFAULT_CANONICAL_URL;
+  return getProxyUrl();
 }

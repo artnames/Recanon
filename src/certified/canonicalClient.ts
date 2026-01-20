@@ -1,26 +1,30 @@
 /**
  * NexArt Canonical Renderer Client
  * 
- * HTTP client for the authoritative NexArt Canonical Renderer server.
- * All certified executions MUST go through this client - no local fallbacks.
- * No browser SDK, no PRNG mirror, no mock.
+ * HTTP client for the Canonical Renderer via secure proxy.
+ * All requests go through the edge function proxy - the browser NEVER calls the renderer directly.
+ * The renderer URL is kept secret on the server side.
  * 
- * Server repo: artnames/nexart-canonical-renderer
- * Endpoints: POST /render, POST /verify
+ * Proxy endpoints:
+ *   GET  /api/canonical/health  -> /health
+ *   POST /api/canonical/render  -> /render  
+ *   POST /api/canonical/verify  -> /verify
  */
 
 import type { CodeModeSnapshot, CodeModeVars } from './codeModeProgram';
 import { varsToArray, DEFAULT_VARS, generateBacktestCodeModeProgram } from './codeModeProgram';
-import { getCanonicalUrl, hasLocalOverride } from './canonicalConfig';
+import { getProxyUrl, isProxyConfigured } from './canonicalConfig';
 
 // Re-export config functions for convenience
+export { getProxyUrl, isProxyConfigured } from './canonicalConfig';
+
+// Legacy exports for backwards compatibility (now deprecated)
 export { getCanonicalUrl, setCanonicalUrl, clearCanonicalUrl, hasLocalOverride } from './canonicalConfig';
 
 /**
- * @deprecated Use getCanonicalUrl() instead for dynamic resolution
- * This export is kept for backwards compatibility but always returns current resolved URL
+ * @deprecated Use getProxyUrl() instead
  */
-export const CANONICAL_RENDERER_URL = getCanonicalUrl();
+export const CANONICAL_RENDERER_URL = getProxyUrl();
 
 // ============================================================
 // REQUEST/RESPONSE TYPES
@@ -213,12 +217,12 @@ export interface LegacyCanonicalSnapshot {
 // ============================================================
 
 /**
- * Check if the Canonical Renderer is reachable
+ * Check if the Canonical Renderer proxy is reachable
  */
 export async function isCanonicalRendererAvailable(): Promise<boolean> {
   try {
-    const url = getCanonicalUrl();
-    const response = await fetch(`${url}/health`, {
+    const proxyUrl = getProxyUrl();
+    const response = await fetch(`${proxyUrl}/health`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -230,7 +234,7 @@ export async function isCanonicalRendererAvailable(): Promise<boolean> {
 
 /**
  * Check health with detailed error info
- * /health returns: { status, node, version, sdk_version, protocol_version, canvas, timestamp }
+ * Calls proxy which forwards to renderer's /health endpoint
  */
 export async function checkCanonicalHealth(): Promise<{
   available: boolean;
@@ -246,11 +250,11 @@ export async function checkCanonicalHealth(): Promise<{
     timestamp?: string;
   };
 }> {
-  const url = getCanonicalUrl();
+  const proxyUrl = getProxyUrl();
   const start = performance.now();
   
   try {
-    const response = await fetch(`${url}/health`, {
+    const response = await fetch(`${proxyUrl}/health`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -260,6 +264,14 @@ export async function checkCanonicalHealth(): Promise<{
       const healthData = await response.json();
       return { available: true, latency, healthData };
     } else {
+      // Handle rate limiting
+      if (response.status === 429) {
+        const errorData = await response.json();
+        return { 
+          available: false, 
+          error: errorData.message || 'Rate limit exceeded. Please wait before retrying.' 
+        };
+      }
       const errorText = await response.text();
       return { 
         available: false, 
@@ -274,6 +286,7 @@ export async function checkCanonicalHealth(): Promise<{
 
 /**
  * Get Canonical Renderer info
+ * Note: Actual renderer URL is now hidden behind proxy
  */
 export function getCanonicalRendererInfo(): {
   url: string;
@@ -281,14 +294,14 @@ export function getCanonicalRendererInfo(): {
   hasOverride: boolean;
 } {
   return {
-    url: getCanonicalUrl(),
-    configured: !!import.meta.env.VITE_CANONICAL_RENDERER_URL,
-    hasOverride: hasLocalOverride(),
+    url: 'Protected Proxy',
+    configured: isProxyConfigured(),
+    hasOverride: false,
   };
 }
 
 /**
- * Render a certified backtest via the Canonical Renderer
+ * Render a certified backtest via the Canonical Renderer proxy
  * 
  * POST /render
  * 
@@ -297,11 +310,11 @@ export function getCanonicalRendererInfo(): {
 export async function renderCertified(
   snapshot: CanonicalSnapshot
 ): Promise<CanonicalRenderResponse> {
-  const baseUrl = getCanonicalUrl();
-  const url = `${baseUrl}/render`;
+  const proxyUrl = getProxyUrl();
+  const url = `${proxyUrl}/render`;
   
   // Debug: Log what we're sending
-  console.log('[Canonical Client] Sending render request to:', url);
+  console.log('[Canonical Client] Sending render request via proxy');
   console.log('[Canonical Client] Snapshot code length:', snapshot.code?.length ?? 'undefined');
   console.log('[Canonical Client] Snapshot seed:', snapshot.seed);
   
@@ -318,9 +331,26 @@ export async function renderCertified(
     if (!response.ok) {
       const errorText = await response.text();
       console.error('[Canonical Client] Render error:', response.status, errorText);
+      
+      // Handle rate limiting
+      if (response.status === 429) {
+        try {
+          const errorData = JSON.parse(errorText);
+          return {
+            success: false,
+            error: errorData.message || 'Rate limit exceeded. Please wait before retrying.',
+          };
+        } catch {
+          return {
+            success: false,
+            error: 'Rate limit exceeded. Please wait before retrying.',
+          };
+        }
+      }
+      
       return {
         success: false,
-        error: `Canonical Renderer error (${response.status}): ${errorText}`,
+        error: `Proxy error (${response.status}): ${errorText}`,
       };
     }
 
@@ -365,13 +395,13 @@ export async function renderCertified(
     console.error('[Canonical Client] Network error:', message);
     return {
       success: false,
-      error: `Failed to connect to Canonical Renderer at ${url}: ${message}`,
+      error: `Failed to connect to proxy: ${message}`,
     };
   }
 }
 
 /**
- * Verify a static (non-loop) certified result via the Canonical Renderer
+ * Verify a static (non-loop) certified result via the Canonical Renderer proxy
  * 
  * POST /verify
  * Request: { snapshot, expectedHash }
@@ -381,8 +411,8 @@ export async function verifyCertifiedStatic(
   snapshot: CanonicalSnapshot,
   expectedHash: string
 ): Promise<CanonicalVerifyResponse> {
-  const baseUrl = getCanonicalUrl();
-  const url = `${baseUrl}/verify`;
+  const proxyUrl = getProxyUrl();
+  const url = `${proxyUrl}/verify`;
   
   try {
     const response = await fetch(url, {
@@ -395,10 +425,29 @@ export async function verifyCertifiedStatic(
 
     if (!response.ok) {
       const errorText = await response.text();
+      
+      // Handle rate limiting
+      if (response.status === 429) {
+        try {
+          const errorData = JSON.parse(errorText);
+          return {
+            mode: 'static',
+            verified: false,
+            error: errorData.message || 'Rate limit exceeded. Please wait before retrying.',
+          };
+        } catch {
+          return {
+            mode: 'static',
+            verified: false,
+            error: 'Rate limit exceeded. Please wait before retrying.',
+          };
+        }
+      }
+      
       return {
         mode: 'static',
         verified: false,
-        error: `Canonical Renderer error (${response.status}): ${errorText}`,
+        error: `Proxy error (${response.status}): ${errorText}`,
       };
     }
 
@@ -418,13 +467,13 @@ export async function verifyCertifiedStatic(
     return {
       mode: 'static',
       verified: false,
-      error: `Failed to connect to Canonical Renderer at ${url}: ${message}`,
+      error: `Failed to connect to proxy: ${message}`,
     };
   }
 }
 
 /**
- * Verify a loop certified result via the Canonical Renderer
+ * Verify a loop certified result via the Canonical Renderer proxy
  * 
  * Loop verification REQUIRES both poster AND animation hashes.
  * Never use expectedHash for loop mode.
@@ -439,8 +488,8 @@ export async function verifyCertifiedLoop(
   expectedPosterHash: string,
   expectedAnimationHash: string
 ): Promise<CanonicalVerifyResponse> {
-  const baseUrl = getCanonicalUrl();
-  const url = `${baseUrl}/verify`;
+  const proxyUrl = getProxyUrl();
+  const url = `${proxyUrl}/verify`;
   
   try {
     const response = await fetch(url, {
@@ -457,10 +506,29 @@ export async function verifyCertifiedLoop(
 
     if (!response.ok) {
       const errorText = await response.text();
+      
+      // Handle rate limiting
+      if (response.status === 429) {
+        try {
+          const errorData = JSON.parse(errorText);
+          return {
+            mode: 'loop',
+            verified: false,
+            error: errorData.message || 'Rate limit exceeded. Please wait before retrying.',
+          };
+        } catch {
+          return {
+            mode: 'loop',
+            verified: false,
+            error: 'Rate limit exceeded. Please wait before retrying.',
+          };
+        }
+      }
+      
       return {
         mode: 'loop',
         verified: false,
-        error: `Canonical Renderer error (${response.status}): ${errorText}`,
+        error: `Proxy error (${response.status}): ${errorText}`,
       };
     }
 
@@ -484,7 +552,7 @@ export async function verifyCertifiedLoop(
     return {
       mode: 'loop',
       verified: false,
-      error: `Failed to connect to Canonical Renderer at ${url}: ${message}`,
+      error: `Failed to connect to proxy: ${message}`,
     };
   }
 }
