@@ -13,9 +13,11 @@ import {
   ChevronRight,
   Download,
   FileJson,
+  CheckCircle2,
+  Circle,
+  Clipboard,
 } from "lucide-react";
 import { Button } from "./ui/button";
-import { HashDisplay } from "./HashDisplay";
 import { Switch } from "./ui/switch";
 import { Label } from "./ui/label";
 import {
@@ -24,6 +26,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "./ui/collapsible";
 import { 
   renderCertified,
   verifyCertifiedStatic,
@@ -54,19 +61,16 @@ interface VerificationResult {
   mode: 'static' | 'loop';
   latencyMs?: number;
   rendererUrl?: string;
-  // Static mode
   expectedHash?: string;
   computedHash?: string;
-  // Loop mode
   posterVerified?: boolean;
   expectedPosterHash?: string;
   computedPosterHash?: string;
   animationVerified?: boolean;
   expectedAnimationHash?: string;
   computedAnimationHash?: string;
-  // Error
   error?: string;
-  // Raw response for debugging
+  errorTitle?: string;
   rawResponse?: unknown;
 }
 
@@ -89,6 +93,38 @@ function truncateHash(hash: string, startLen = 12, endLen = 8): string {
   return `${hash.slice(0, startLen)}...${hash.slice(-endLen)}`;
 }
 
+// Parse and humanize error messages
+function parseError(error: string): { title: string; body: string } {
+  if (error.includes('INVALID_CODE') || error.includes('non-empty string')) {
+    return {
+      title: "Sealing blocked",
+      body: "snapshot.code must be a non-empty string.",
+    };
+  }
+  if (error.includes('createCanvas') || error.includes('PROTOCOL_VIOLATION')) {
+    return {
+      title: "Sealing blocked",
+      body: "Canvas is fixed at 1950×2400. Remove createCanvas() from your code.",
+    };
+  }
+  if (error.includes('poster') && error.includes('animation')) {
+    return {
+      title: "Check failed",
+      body: "Loop mode needs both poster + animation hashes. Click 'Seal Baseline' first.",
+    };
+  }
+  if (error.includes('baseline') || error.includes('expected')) {
+    return {
+      title: "No baseline yet",
+      body: "Click 'Seal Baseline' first to capture the expected hash.",
+    };
+  }
+  return {
+    title: "Error",
+    body: error,
+  };
+}
+
 export function LiveVerifier() {
   const [isLoopMode, setIsLoopMode] = useState(false);
   const [snapshotJson, setSnapshotJson] = useState(() => {
@@ -102,6 +138,10 @@ export function LiveVerifier() {
   const [result, setResult] = useState<VerificationResult | null>(null);
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [showRawResponse, setShowRawResponse] = useState(false);
+  const [tamperOpen, setTamperOpen] = useState(false);
+
+  const hasBaseline = !!expectedHash;
+  const hasFullLoopBaseline = isLoopMode ? (!!expectedHash && !!expectedAnimationHash) : !!expectedHash;
 
   // Validate JSON on change
   const handleSnapshotChange = (value: string) => {
@@ -115,8 +155,8 @@ export function LiveVerifier() {
     setResult(null);
   };
 
-  // Get a verified baseline by rendering current snapshot
-  const handleRenderBaseline = useCallback(async () => {
+  // Seal baseline by rendering current snapshot
+  const handleSealBaseline = useCallback(async () => {
     if (jsonError) return;
 
     setIsRendering(true);
@@ -135,40 +175,45 @@ export function LiveVerifier() {
           setExpectedAnimationHash(data.animationHash);
         }
         toast({
-          title: "Baseline captured",
-          description: `Hash: ${data.imageHash.slice(0, 16)}... (${latencyMs}ms)`,
+          title: "Baseline sealed",
+          description: `Hash captured in ${latencyMs}ms`,
         });
       } else {
-        toast({
-          title: "Render failed",
-          description: renderResult.error || "Unknown error",
-          variant: "destructive",
+        const { title, body } = parseError(renderResult.error || "Unknown error");
+        setResult({
+          status: 'error',
+          mode: isLoopMode ? 'loop' : 'static',
+          rendererUrl: getCanonicalUrl(),
+          errorTitle: title,
+          error: body,
         });
       }
     } catch (e) {
-      toast({
-        title: "Error",
-        description: e instanceof Error ? e.message : "Failed to render",
-        variant: "destructive",
+      const { title, body } = parseError(e instanceof Error ? e.message : "Failed to render");
+      setResult({
+        status: 'error',
+        mode: isLoopMode ? 'loop' : 'static',
+        rendererUrl: getCanonicalUrl(),
+        errorTitle: title,
+        error: body,
       });
     }
 
     setIsRendering(false);
   }, [snapshotJson, jsonError, isLoopMode]);
 
-  // Verify current snapshot against expected hash
-  const handleVerify = useCallback(async () => {
+  // Check against baseline
+  const handleCheckAgainstBaseline = useCallback(async () => {
     if (jsonError) return;
 
-    // Check for missing hashes and provide actionable feedback
+    // Block if no baseline
     if (!expectedHash) {
       setResult({
         status: 'error',
         mode: isLoopMode ? 'loop' : 'static',
         rendererUrl: getCanonicalUrl(),
-        error: isLoopMode 
-          ? 'Missing expected hashes. Click "Get Baseline Hash" first to capture the baseline.'
-          : 'Missing expectedImageHash. Click "Get Baseline Hash" first to capture the baseline.',
+        errorTitle: "No baseline yet",
+        error: "Click 'Seal Baseline' first to capture the expected hash.",
       });
       return;
     }
@@ -178,7 +223,8 @@ export function LiveVerifier() {
         status: 'error',
         mode: 'loop',
         rendererUrl: getCanonicalUrl(),
-        error: 'Loop mode requires BOTH poster and animation hashes. Click "Get Baseline Hash" first.',
+        errorTitle: "Incomplete baseline",
+        error: "Loop mode needs both poster + animation hashes. Click 'Seal Baseline' first.",
       });
       return;
     }
@@ -199,12 +245,14 @@ export function LiveVerifier() {
       const latencyMs = Math.round(performance.now() - start);
 
       if (verifyResult.error) {
+        const { title, body } = parseError(verifyResult.error);
         setResult({
           status: 'error',
           mode: verifyResult.mode,
           latencyMs,
           rendererUrl: getCanonicalUrl(),
-          error: verifyResult.error,
+          errorTitle: title,
+          error: body,
           rawResponse: verifyResult,
         });
       } else if (verifyResult.verified) {
@@ -241,11 +289,13 @@ export function LiveVerifier() {
         });
       }
     } catch (e) {
+      const { title, body } = parseError(e instanceof Error ? e.message : 'Verification failed');
       setResult({
         status: 'error',
         mode: isLoopMode ? 'loop' : 'static',
         rendererUrl: getCanonicalUrl(),
-        error: e instanceof Error ? e.message : 'Verification failed',
+        errorTitle: title,
+        error: body,
       });
     }
 
@@ -312,39 +362,71 @@ export function LiveVerifier() {
     toast({ title: "Copied", description: "Hash copied to clipboard" });
   };
 
-  const handleCopyUrl = (url: string) => {
-    navigator.clipboard.writeText(url);
-    toast({ title: "Copied", description: "URL copied to clipboard" });
-  };
-
-  // Download bundle template JSON
-  const handleDownloadBundle = () => {
+  const handleCopyJson = () => {
     try {
-      const snapshot = JSON.parse(snapshotJson);
-      const bundle: Record<string, unknown> = {
-        bundleVersion: "2.0.0",
-        canonicalUrl: getCanonicalUrl(),
-        snapshot,
-        timestamp: new Date().toISOString(),
-      };
-
-      if (isLoopMode) {
-        bundle.verificationRequirements = "loop-requires-both-hashes";
-        bundle.expectedPosterHash = expectedHash || "sha256:___FILL_ME___";
-        bundle.expectedAnimationHash = expectedAnimationHash || "sha256:___FILL_ME___";
-      } else {
-        bundle.verificationRequirements = "static-single-hash";
-        bundle.expectedImageHash = expectedHash || "sha256:___FILL_ME___";
-      }
-
-      downloadJson('recanon-bundle-template.json', bundle);
-      toast({ title: "Downloaded", description: "Bundle template saved" });
+      const fillableBundle = buildFillableBundle();
+      navigator.clipboard.writeText(JSON.stringify(fillableBundle, null, 2));
+      toast({ title: "Copied", description: "JSON copied to clipboard" });
     } catch {
       toast({ title: "Error", description: "Invalid JSON snapshot", variant: "destructive" });
     }
   };
 
-  // Download snapshot-only JSON
+  // Build fillable bundle structure
+  const buildFillableBundle = () => {
+    const snapshot = JSON.parse(snapshotJson);
+    const timestamp = new Date().toISOString();
+    
+    return {
+      bundleVersion: "recanon.event.v1",
+      createdAt: timestamp,
+      mode: isLoopMode ? "loop" : "static",
+      claim: {
+        title: "",
+        statement: "",
+        eventDate: "",
+        subject: "",
+        notes: ""
+      },
+      sources: [
+        { label: "", url: "", retrievedAt: "", selectorOrEvidence: "" }
+      ],
+      canonical: {
+        via: "proxy",
+        proxyUrl: getCanonicalUrl(),
+        renderer: "hidden",
+        protocol: "nexart",
+        protocolVersion: "1.0",
+        sdkVersion: "1.6.0"
+      },
+      snapshot,
+      baseline: isLoopMode ? {
+        posterHash: expectedHash || "",
+        animationHash: expectedAnimationHash || ""
+      } : {
+        posterHash: expectedHash || "",
+        animationHash: null
+      },
+      check: {
+        lastCheckedAt: result?.status === 'verified' || result?.status === 'failed' ? timestamp : "",
+        result: result?.status === 'verified' ? "VERIFIED" : result?.status === 'failed' ? "FAILED" : ""
+      }
+    };
+  };
+
+  // Download fillable bundle
+  const handleDownloadFillable = () => {
+    try {
+      const fillableBundle = buildFillableBundle();
+      const ts = Date.now();
+      downloadJson(`recanon-bundle-${ts}.json`, fillableBundle);
+      toast({ title: "Downloaded", description: "Fillable bundle saved" });
+    } catch {
+      toast({ title: "Error", description: "Invalid JSON snapshot", variant: "destructive" });
+    }
+  };
+
+  // Download snapshot-only
   const handleDownloadSnapshot = () => {
     try {
       const snapshot = JSON.parse(snapshotJson);
@@ -357,27 +439,56 @@ export function LiveVerifier() {
 
   return (
     <div className="space-y-5">
-      {/* Guided Flow Header */}
-      <div className="p-4 rounded-lg border border-primary/20 bg-primary/5">
-        <h3 className="text-sm font-semibold text-foreground mb-2">How to use the Live Verifier</h3>
-        <ol className="text-sm text-muted-foreground space-y-1">
-          <li className="flex items-start gap-2">
-            <span className="font-mono text-primary text-xs bg-primary/10 px-1.5 py-0.5 rounded">1</span>
-            <span>Paste or edit snapshot JSON on the left</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="font-mono text-primary text-xs bg-primary/10 px-1.5 py-0.5 rounded">2</span>
-            <span>Click <strong>Get Baseline Hash</strong> to capture expected hash</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="font-mono text-primary text-xs bg-primary/10 px-1.5 py-0.5 rounded">3</span>
-            <span>Click <strong>Check Snapshot</strong> to verify</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="font-mono text-muted-foreground text-xs bg-muted px-1.5 py-0.5 rounded">4</span>
-            <span className="text-muted-foreground">Optional: Use tamper actions to see it fail</span>
-          </li>
-        </ol>
+      {/* Inline Stepper */}
+      <div className="flex items-center gap-2 p-3 rounded-lg border border-border bg-muted/30">
+        <div className={cn(
+          "flex items-center gap-1.5 text-xs",
+          hasBaseline ? "text-verified" : "text-foreground"
+        )}>
+          {hasBaseline ? (
+            <CheckCircle2 className="w-4 h-4" />
+          ) : (
+            <Circle className="w-4 h-4" />
+          )}
+          <span className="font-medium">1. Seal baseline</span>
+        </div>
+        <ChevronRight className="w-4 h-4 text-muted-foreground" />
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Circle className="w-4 h-4" />
+          <span>2. Edit something</span>
+        </div>
+        <ChevronRight className="w-4 h-4 text-muted-foreground" />
+        <div className={cn(
+          "flex items-center gap-1.5 text-xs",
+          result?.status ? (result.status === 'verified' ? "text-verified" : result.status === 'failed' ? "text-destructive" : "text-warning") : "text-muted-foreground"
+        )}>
+          {result?.status === 'verified' ? (
+            <CheckCircle2 className="w-4 h-4" />
+          ) : result?.status === 'failed' ? (
+            <AlertTriangle className="w-4 h-4" />
+          ) : (
+            <Circle className="w-4 h-4" />
+          )}
+          <span>3. Check</span>
+        </div>
+      </div>
+
+      {/* Status Pills */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={cn(
+          "text-xs px-2 py-1 rounded-full border font-mono",
+          hasFullLoopBaseline 
+            ? "border-verified/50 bg-verified/10 text-verified" 
+            : "border-muted-foreground/30 bg-muted/50 text-muted-foreground"
+        )}>
+          Baseline: {hasFullLoopBaseline ? "Ready" : "Not set"}
+        </span>
+        <span className="text-xs px-2 py-1 rounded-full border border-primary/50 bg-primary/10 text-primary font-mono">
+          Mode: {isLoopMode ? "Loop" : "Static"}
+        </span>
+        <span className="text-xs px-2 py-1 rounded-full border border-muted-foreground/30 bg-muted/50 text-muted-foreground font-mono">
+          Renderer: via proxy
+        </span>
       </div>
 
       {/* 2-Column Grid Layout */}
@@ -423,54 +534,60 @@ export function LiveVerifier() {
               value={snapshotJson}
               onChange={(e) => handleSnapshotChange(e.target.value)}
               className={cn(
-                "w-full flex-1 min-h-[420px] px-3 py-2 rounded-md bg-input border text-xs font-mono focus:outline-none focus:ring-1 resize-none",
+                "w-full flex-1 min-h-[380px] px-3 py-2 rounded-md bg-input border text-[11px] leading-relaxed font-mono focus:outline-none focus:ring-1 resize-none",
                 jsonError ? "border-destructive focus:ring-destructive" : "border-border focus:ring-primary"
               )}
               spellCheck={false}
             />
 
             {/* Expected Hash Display */}
-            {expectedHash && (
-              <div className="mt-3 p-3 rounded-md bg-muted/50 border border-border space-y-2">
+            {(expectedHash || (isLoopMode && expectedAnimationHash)) && (
+              <div className="mt-3 p-3 rounded-md bg-verified/5 border border-verified/30 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Expected Hash (baseline)</span>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-5 px-1.5"
-                    onClick={() => handleCopyHash(expectedHash)}
-                  >
-                    <Copy className="w-3 h-3" />
-                  </Button>
+                  <span className="text-xs font-medium text-verified">Baseline (sealed)</span>
                 </div>
-                <code className="text-xs font-mono text-foreground block break-all">{expectedHash}</code>
+                {expectedHash && (
+                  <div className="flex items-center justify-between gap-2">
+                    <code className="text-[10px] font-mono text-foreground truncate flex-1">
+                      {isLoopMode ? "poster: " : ""}{truncateHash(expectedHash, 16, 8)}
+                    </code>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-5 px-1.5 shrink-0"
+                      onClick={() => handleCopyHash(expectedHash)}
+                    >
+                      <Copy className="w-3 h-3" />
+                    </Button>
+                  </div>
+                )}
                 {isLoopMode && expectedAnimationHash && (
-                  <>
-                    <div className="flex items-center justify-between pt-2 border-t border-border">
-                      <span className="text-xs text-muted-foreground">Expected Animation Hash</span>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-5 px-1.5"
-                        onClick={() => handleCopyHash(expectedAnimationHash)}
-                      >
-                        <Copy className="w-3 h-3" />
-                      </Button>
-                    </div>
-                    <code className="text-xs font-mono text-foreground block break-all">{expectedAnimationHash}</code>
-                  </>
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-verified/20">
+                    <code className="text-[10px] font-mono text-foreground truncate flex-1">
+                      animation: {truncateHash(expectedAnimationHash, 16, 8)}
+                    </code>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-5 px-1.5 shrink-0"
+                      onClick={() => handleCopyHash(expectedAnimationHash)}
+                    >
+                      <Copy className="w-3 h-3" />
+                    </Button>
+                  </div>
                 )}
               </div>
             )}
           </div>
 
-          {/* Card Footer - Sticky Controls */}
+          {/* Card Footer - Controls */}
           <div className="px-4 py-3 border-t border-border bg-muted/20">
+            {/* Main Actions */}
             <div className="flex items-center justify-between gap-3">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleRenderBaseline}
+                onClick={handleSealBaseline}
                 disabled={isRendering || !!jsonError}
               >
                 {isRendering ? (
@@ -478,13 +595,13 @@ export function LiveVerifier() {
                 ) : (
                   <Hash className="w-4 h-4 mr-2" />
                 )}
-                Get Baseline Hash
+                Seal Baseline
               </Button>
               <div className="flex items-center gap-2">
                 <Button
                   variant="default"
                   size="sm"
-                  onClick={handleVerify}
+                  onClick={handleCheckAgainstBaseline}
                   disabled={isVerifying || !!jsonError}
                 >
                   {isVerifying ? (
@@ -492,10 +609,10 @@ export function LiveVerifier() {
                   ) : (
                     <Play className="w-4 h-4 mr-2" />
                   )}
-                  Check Snapshot
+                  Check Against Baseline
                 </Button>
 
-                {/* Download Dropdown */}
+                {/* Export Dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="px-2">
@@ -503,42 +620,51 @@ export function LiveVerifier() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={handleDownloadBundle}>
+                    <DropdownMenuItem onClick={handleCopyJson}>
+                      <Clipboard className="w-4 h-4 mr-2" />
+                      Copy JSON
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleDownloadFillable}>
                       <FileJson className="w-4 h-4 mr-2" />
-                      Download JSON (Bundle Template)
+                      Download JSON (fillable)
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={handleDownloadSnapshot}>
                       <Code className="w-4 h-4 mr-2" />
-                      Download Snapshot
+                      Download Snapshot Only
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
             </div>
 
-            {/* Tamper Actions */}
-            <div className="mt-3 pt-3 border-t border-border">
-              <span className="text-xs text-muted-foreground block mb-2">Tamper (flip VERIFIED → FAILED)</span>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleTamperSeed}>
-                  <Shuffle className="w-3 h-3 mr-1" />
-                  +1 Seed
-                </Button>
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleTamperVar}>
-                  <Shuffle className="w-3 h-3 mr-1" />
-                  +1 VAR[0]
-                </Button>
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleTamperCode}>
-                  <Code className="w-3 h-3 mr-1" />
-                  Edit Code
-                </Button>
-                <div className="flex-1" />
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleReset}>
-                  <RotateCcw className="w-3 h-3 mr-1" />
-                  Reset
-                </Button>
-              </div>
-            </div>
+            {/* Collapsible Tamper Actions */}
+            <Collapsible open={tamperOpen} onOpenChange={setTamperOpen} className="mt-3">
+              <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                {tamperOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                <span>Try tampering (flip VERIFIED → FAILED)</span>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="flex flex-wrap items-center gap-2 mt-2 pt-2 border-t border-border">
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleTamperSeed}>
+                    <Shuffle className="w-3 h-3 mr-1" />
+                    +1 Seed
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleTamperVar}>
+                    <Shuffle className="w-3 h-3 mr-1" />
+                    +1 VAR[0]
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleTamperCode}>
+                    <Code className="w-3 h-3 mr-1" />
+                    Edit Code
+                  </Button>
+                  <div className="flex-1" />
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleReset}>
+                    <RotateCcw className="w-3 h-3 mr-1" />
+                    Reset
+                  </Button>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         </div>
 
@@ -552,19 +678,21 @@ export function LiveVerifier() {
           {/* Result Body */}
           <div className="p-4 flex-1 flex flex-col">
             {!result && !isVerifying && (
-              <div className="flex-1 flex items-center justify-center rounded-md bg-muted/30 border border-dashed border-border text-muted-foreground min-h-[420px]">
-                <div className="text-center p-6">
+              <div className="flex-1 flex items-center justify-center rounded-md bg-muted/30 border border-dashed border-border text-muted-foreground min-h-[380px]">
+                <div className="text-center p-6 max-w-xs">
                   <ShieldCheck className="w-10 h-10 mx-auto mb-3 text-muted-foreground/50" />
                   <p className="text-sm font-medium">No result yet</p>
-                  <p className="text-xs mt-1">
-                    Click "Get Baseline Hash" then "Check Snapshot"
+                  <p className="text-xs mt-2">
+                    1. Click <strong>"Seal Baseline"</strong> to capture the expected hash<br/>
+                    2. Optionally modify the snapshot<br/>
+                    3. Click <strong>"Check Against Baseline"</strong>
                   </p>
                 </div>
               </div>
             )}
 
             {isVerifying && (
-              <div className="flex-1 flex items-center justify-center rounded-md bg-muted/30 border border-border min-h-[420px]">
+              <div className="flex-1 flex items-center justify-center rounded-md bg-muted/30 border border-border min-h-[380px]">
                 <div className="text-center">
                   <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
                   <p className="text-sm text-muted-foreground mt-3">Checking via Canonical Renderer...</p>
@@ -585,31 +713,33 @@ export function LiveVerifier() {
                 <div className="flex items-center gap-4">
                   {result.status === 'verified' ? (
                     <>
-                      <div className="w-14 h-14 rounded-full bg-verified/20 flex items-center justify-center">
-                        <ShieldCheck className="w-8 h-8 text-verified" />
+                      <div className="w-12 h-12 rounded-full bg-verified/20 flex items-center justify-center">
+                        <ShieldCheck className="w-7 h-7 text-verified" />
                       </div>
                       <div>
-                        <div className="text-2xl font-bold text-verified font-mono tracking-tight">VERIFIED</div>
+                        <div className="text-xl font-bold text-verified font-mono tracking-tight">VERIFIED</div>
                         <div className="text-sm text-muted-foreground">All hashes match</div>
                       </div>
                     </>
                   ) : result.status === 'error' ? (
                     <>
-                      <div className="w-14 h-14 rounded-full bg-warning/20 flex items-center justify-center">
-                        <AlertTriangle className="w-8 h-8 text-warning" />
+                      <div className="w-12 h-12 rounded-full bg-warning/20 flex items-center justify-center">
+                        <AlertTriangle className="w-7 h-7 text-warning" />
                       </div>
                       <div>
-                        <div className="text-2xl font-bold text-warning font-mono tracking-tight">ERROR</div>
+                        <div className="text-xl font-bold text-warning font-mono tracking-tight">
+                          {result.errorTitle || "ERROR"}
+                        </div>
                         <div className="text-sm text-muted-foreground max-w-xs">{result.error}</div>
                       </div>
                     </>
                   ) : (
                     <>
-                      <div className="w-14 h-14 rounded-full bg-destructive/20 flex items-center justify-center">
-                        <AlertTriangle className="w-8 h-8 text-destructive" />
+                      <div className="w-12 h-12 rounded-full bg-destructive/20 flex items-center justify-center">
+                        <AlertTriangle className="w-7 h-7 text-destructive" />
                       </div>
                       <div>
-                        <div className="text-2xl font-bold text-destructive font-mono tracking-tight">FAILED</div>
+                        <div className="text-xl font-bold text-destructive font-mono tracking-tight">FAILED</div>
                         <div className="text-sm text-muted-foreground">Hash mismatch — determinism broken</div>
                       </div>
                     </>
@@ -617,151 +747,122 @@ export function LiveVerifier() {
                 </div>
 
                 {/* Metadata Row */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs pt-3 border-t border-border">
-                  <div>
-                    <span className="text-muted-foreground">Mode:</span>
-                    <span className="ml-1.5 font-mono">{result.mode}</span>
+                {(result.mode || result.latencyMs !== undefined) && (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs pt-3 border-t border-border">
+                    <span className="text-muted-foreground">Mode: <span className="font-mono text-foreground">{result.mode}</span></span>
+                    {result.latencyMs !== undefined && (
+                      <span className="text-muted-foreground">Latency: <span className="font-mono text-foreground">{result.latencyMs}ms</span></span>
+                    )}
                   </div>
-                  {result.latencyMs !== undefined && (
-                    <div>
-                      <span className="text-muted-foreground">Latency:</span>
-                      <span className="ml-1.5 font-mono">{result.latencyMs}ms</span>
-                    </div>
-                  )}
-                  {result.rendererUrl && (
-                    <div className="flex items-center gap-1">
-                      <span className="text-muted-foreground">Renderer:</span>
-                      <span className="font-mono">{truncateHash(result.rendererUrl, 20, 0)}</span>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-4 w-4 p-0"
-                        onClick={() => handleCopyUrl(result.rendererUrl!)}
-                      >
-                        <Copy className="w-2.5 h-2.5" />
-                      </Button>
-                    </div>
-                  )}
-                </div>
+                )}
 
-                {/* Static Mode Hashes */}
-                {result.mode === 'static' && result.status !== 'error' && (
-                  <div className="space-y-3 pt-3 border-t border-border">
+                {/* Hash Comparison Block - Static */}
+                {result.mode === 'static' && result.status !== 'error' && (result.expectedHash || result.computedHash) && (
+                  <div className="p-3 rounded-md bg-muted/30 border border-border space-y-2">
                     {result.expectedHash && (
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs text-muted-foreground">Expected</span>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="h-5 px-1.5"
-                            onClick={() => handleCopyHash(result.expectedHash!)}
-                          >
-                            <Copy className="w-3 h-3" />
-                          </Button>
-                        </div>
-                        <code className="text-xs font-mono break-all block">{truncateHash(result.expectedHash, 24, 12)}</code>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-muted-foreground shrink-0">Expected:</span>
+                        <code className="text-[10px] font-mono truncate">{truncateHash(result.expectedHash, 20, 10)}</code>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-5 px-1 shrink-0"
+                          onClick={() => handleCopyHash(result.expectedHash!)}
+                        >
+                          <Copy className="w-3 h-3" />
+                        </Button>
                       </div>
                     )}
                     {result.computedHash && (
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs text-muted-foreground">Computed</span>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="h-5 px-1.5"
-                            onClick={() => handleCopyHash(result.computedHash!)}
-                          >
-                            <Copy className="w-3 h-3" />
-                          </Button>
-                        </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-muted-foreground shrink-0">Computed:</span>
                         <code className={cn(
-                          "text-xs font-mono break-all block",
+                          "text-[10px] font-mono truncate",
                           result.status === 'verified' ? "text-verified" : "text-destructive"
-                        )}>{truncateHash(result.computedHash, 24, 12)}</code>
+                        )}>{truncateHash(result.computedHash, 20, 10)}</code>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-5 px-1 shrink-0"
+                          onClick={() => handleCopyHash(result.computedHash!)}
+                        >
+                          <Copy className="w-3 h-3" />
+                        </Button>
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* Loop Mode Details */}
+                {/* Hash Comparison Block - Loop */}
                 {result.mode === 'loop' && result.status !== 'error' && (
-                  <div className="space-y-4 pt-3 border-t border-border">
+                  <div className="p-3 rounded-md bg-muted/30 border border-border space-y-3">
                     {/* Poster */}
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium">Poster Hash</span>
+                        <span className="text-xs font-medium">Poster</span>
                         <span className={cn(
                           "text-xs font-mono",
                           result.posterVerified ? "text-verified" : "text-destructive"
                         )}>
-                          {result.posterVerified ? '✓ Match' : '✗ Mismatch'}
+                          {result.posterVerified ? '✓' : '✗'}
                         </span>
                       </div>
                       {result.expectedPosterHash && (
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">Expected:</span>
-                          <code className="font-mono">{truncateHash(result.expectedPosterHash, 12, 8)}</code>
-                        </div>
+                        <code className="text-[10px] font-mono text-muted-foreground block truncate">
+                          exp: {truncateHash(result.expectedPosterHash, 14, 6)}
+                        </code>
                       )}
                       {result.computedPosterHash && (
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">Computed:</span>
-                          <code className={cn(
-                            "font-mono",
-                            result.posterVerified ? "text-verified" : "text-destructive"
-                          )}>{truncateHash(result.computedPosterHash, 12, 8)}</code>
-                        </div>
+                        <code className={cn(
+                          "text-[10px] font-mono block truncate",
+                          result.posterVerified ? "text-verified" : "text-destructive"
+                        )}>
+                          got: {truncateHash(result.computedPosterHash, 14, 6)}
+                        </code>
                       )}
                     </div>
 
                     {/* Animation */}
-                    <div className="space-y-2 pt-3 border-t border-border">
+                    <div className="space-y-1 pt-2 border-t border-border">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium">Animation Hash</span>
+                        <span className="text-xs font-medium">Animation</span>
                         <span className={cn(
                           "text-xs font-mono",
                           result.animationVerified ? "text-verified" : "text-destructive"
                         )}>
-                          {result.animationVerified ? '✓ Match' : '✗ Mismatch'}
+                          {result.animationVerified ? '✓' : '✗'}
                         </span>
                       </div>
                       {result.expectedAnimationHash && (
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">Expected:</span>
-                          <code className="font-mono">{truncateHash(result.expectedAnimationHash, 12, 8)}</code>
-                        </div>
+                        <code className="text-[10px] font-mono text-muted-foreground block truncate">
+                          exp: {truncateHash(result.expectedAnimationHash, 14, 6)}
+                        </code>
                       )}
                       {result.computedAnimationHash && (
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">Computed:</span>
-                          <code className={cn(
-                            "font-mono",
-                            result.animationVerified ? "text-verified" : "text-destructive"
-                          )}>{truncateHash(result.computedAnimationHash, 12, 8)}</code>
-                        </div>
+                        <code className={cn(
+                          "text-[10px] font-mono block truncate",
+                          result.animationVerified ? "text-verified" : "text-destructive"
+                        )}>
+                          got: {truncateHash(result.computedAnimationHash, 14, 6)}
+                        </code>
                       )}
                     </div>
                   </div>
                 )}
 
-                {/* Raw Response (Collapsed by default) */}
+                {/* View Raw JSON (Collapsed) */}
                 {result.rawResponse && (
-                  <div className="pt-3 border-t border-border">
-                    <button
-                      onClick={() => setShowRawResponse(!showRawResponse)}
-                      className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                    >
+                  <Collapsible open={showRawResponse} onOpenChange={setShowRawResponse}>
+                    <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
                       {showRawResponse ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                      <span>Raw Response JSON</span>
-                    </button>
-                    {showRawResponse && (
-                      <pre className="mt-2 p-3 rounded bg-muted/50 text-xs font-mono overflow-auto max-h-48 border border-border">
+                      <span>View raw JSON</span>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <pre className="mt-2 p-3 rounded bg-muted/50 text-[10px] font-mono overflow-auto max-h-40 border border-border">
                         {JSON.stringify(result.rawResponse, null, 2)}
                       </pre>
-                    )}
-                  </div>
+                    </CollapsibleContent>
+                  </Collapsible>
                 )}
               </div>
             )}
