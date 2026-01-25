@@ -156,6 +156,7 @@ serve(async (req) => {
   let method = req.method;
   let body: string | null = null;
   let requiresAuth = false;
+  let expectsBinaryResponse = false;
 
   if (path === '/health' || path === '' || path === '/') {
     targetPath = '/health';
@@ -167,6 +168,7 @@ serve(async (req) => {
     // Use authenticated /api/render endpoint
     targetPath = '/api/render';
     requiresAuth = true;
+    expectsBinaryResponse = true; // NexArt returns PNG binary
     
     // ========== SECURITY: Payload size limit ==========
     const contentLength = req.headers.get('content-length');
@@ -180,11 +182,11 @@ serve(async (req) => {
       );
     }
     
-    body = await req.text();
+    const rawBody = await req.text();
     
     // Double-check actual body size
-    if (body.length > MAX_PAYLOAD_SIZE) {
-      console.warn(`[canonical-proxy] Payload too large after read: ${body.length} bytes`);
+    if (rawBody.length > MAX_PAYLOAD_SIZE) {
+      console.warn(`[canonical-proxy] Payload too large after read: ${rawBody.length} bytes`);
       return createErrorResponse(
         413, 
         'Payload too large', 
@@ -195,7 +197,7 @@ serve(async (req) => {
     
     // ========== SECURITY: Basic payload validation ==========
     try {
-      const parsed = JSON.parse(body);
+      const parsed = JSON.parse(rawBody);
       if (!parsed.code || typeof parsed.code !== 'string') {
         return createErrorResponse(
           400,
@@ -204,14 +206,18 @@ serve(async (req) => {
           rateCheck.remaining
         );
       }
-      if (typeof parsed.seed !== 'number') {
-        return createErrorResponse(
-          400,
-          'Invalid request', 
-          'Missing or invalid "seed" field. Snapshot must include a numeric seed.',
-          rateCheck.remaining
-        );
-      }
+      
+      // Transform payload to NexArt API format
+      const nexartPayload = {
+        code: parsed.code,
+        seed: String(parsed.seed ?? 0), // NexArt expects string seed
+        VAR: parsed.vars || parsed.VAR || [0,0,0,0,0,0,0,0,0,0], // NexArt uses VAR not vars
+        protocolVersion: "1.2.0",
+      };
+      
+      body = JSON.stringify(nexartPayload);
+      console.log(`[canonical-proxy] Transformed payload: seed=${nexartPayload.seed}, VAR length=${nexartPayload.VAR.length}`);
+      
     } catch {
       return createErrorResponse(
         400,
@@ -280,6 +286,11 @@ serve(async (req) => {
       headers['Authorization'] = `Bearer ${CANONICAL_RENDERER_API_KEY}`;
     }
 
+    // Request PNG binary for render endpoint
+    if (expectsBinaryResponse) {
+      headers['Accept'] = 'image/png';
+    }
+
     const fetchOptions: RequestInit = {
       method,
       headers,
@@ -329,9 +340,49 @@ serve(async (req) => {
       );
     }
 
-    const data = await response.text();
     console.log(`[canonical-proxy] Success: ${method} ${path}`);
 
+    // Handle binary PNG response from render endpoint
+    if (expectsBinaryResponse) {
+      const pngBuffer = await response.arrayBuffer();
+      const pngBytes = new Uint8Array(pngBuffer);
+      
+      // Compute SHA-256 hash of PNG bytes
+      const hashBuffer = await crypto.subtle.digest('SHA-256', pngBytes);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const imageHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      
+      // Convert to base64
+      const base64 = btoa(String.fromCharCode(...pngBytes));
+      
+      console.log(`[canonical-proxy] PNG response: ${pngBytes.length} bytes, hash=${imageHash.substring(0, 16)}...`);
+      
+      // Return JSON with base64 PNG and computed hash
+      return new Response(
+        JSON.stringify({
+          type: 'static',
+          mime: 'image/png',
+          imageHash: imageHash,
+          imageBase64: base64,
+          debug: {
+            pngByteLength: pngBytes.length,
+            hashSource: 'sha256(pngBytes)',
+          }
+        }),
+        {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+            'X-RateLimit-Remaining': String(rateCheck.remaining),
+            'X-Proxy': 'canonical-proxy'
+          },
+        }
+      );
+    }
+
+    // Handle JSON response for other endpoints
+    const data = await response.text();
     return new Response(data, {
       status: 200,
       headers: {
