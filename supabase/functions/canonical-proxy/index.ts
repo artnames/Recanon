@@ -230,9 +230,6 @@ serve(async (req) => {
     if (method !== 'POST') {
       return createErrorResponse(405, 'Method not allowed', 'POST required for /verify', rateCheck.remaining);
     }
-    // Use authenticated /api/verify endpoint
-    targetPath = '/api/verify';
-    requiresAuth = true;
     
     // Payload size limit for verify
     const contentLength = req.headers.get('content-length');
@@ -245,15 +242,106 @@ serve(async (req) => {
       );
     }
     
-    body = await req.text();
+    const verifyBody = await req.text();
     
-    if (body.length > MAX_PAYLOAD_SIZE) {
+    if (verifyBody.length > MAX_PAYLOAD_SIZE) {
       return createErrorResponse(
         413, 
         'Payload too large', 
         `Request body exceeds maximum size of ${MAX_PAYLOAD_SIZE / 1024}KB`,
         rateCheck.remaining
       );
+    }
+
+    // Parse verify request and handle verification locally by re-rendering
+    try {
+      const parsed = JSON.parse(verifyBody);
+      const snapshot = parsed.snapshot || parsed;
+      const expectedHash = parsed.expectedImageHash || parsed.expectedPosterHash || parsed.posterHash;
+      
+      if (!snapshot.code || typeof snapshot.code !== 'string') {
+        return createErrorResponse(400, 'Invalid request', 'Missing snapshot.code for verification', rateCheck.remaining);
+      }
+      if (!expectedHash) {
+        return createErrorResponse(400, 'Invalid request', 'Missing expectedImageHash for verification', rateCheck.remaining);
+      }
+
+      // Check API key
+      if (!CANONICAL_RENDERER_API_KEY) {
+        return createErrorResponse(500, 'Proxy not configured', 'Missing CANONICAL_RENDERER_API_KEY secret.', rateCheck.remaining);
+      }
+
+      // Re-render the snapshot to verify
+      const nexartPayload = {
+        code: snapshot.code,
+        seed: String(snapshot.seed ?? 0),
+        VAR: snapshot.vars || snapshot.VAR || [0,0,0,0,0,0,0,0,0,0],
+        protocolVersion: "1.2.0",
+      };
+
+      console.log(`[canonical-proxy] Verify: re-rendering to compare with expected hash ${expectedHash.substring(0, 16)}...`);
+
+      const renderResponse = await fetch(`${CANONICAL_RENDERER_URL}/api/render`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'image/png',
+          'Authorization': `Bearer ${CANONICAL_RENDERER_API_KEY}`,
+          'Cache-Control': 'no-store',
+          'X-Request-Id': crypto.randomUUID(),
+        },
+        body: JSON.stringify(nexartPayload),
+      });
+
+      if (!renderResponse.ok) {
+        const errorText = await renderResponse.text();
+        console.error(`[canonical-proxy] Verify render failed: ${renderResponse.status} - ${errorText}`);
+        return new Response(
+          JSON.stringify({
+            verified: false,
+            error: 'Render failed during verification',
+            details: errorText.substring(0, 500),
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Compute hash of re-rendered PNG
+      const pngBuffer = await renderResponse.arrayBuffer();
+      const pngBytes = new Uint8Array(pngBuffer);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', pngBytes);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const computedHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+      // Normalize hashes for comparison (strip sha256: prefix, lowercase)
+      const normalizeHash = (h: string) => h.replace(/^sha256:/i, '').toLowerCase();
+      const expectedNorm = normalizeHash(expectedHash);
+      const computedNorm = normalizeHash(computedHash);
+      const verified = expectedNorm === computedNorm;
+
+      console.log(`[canonical-proxy] Verify result: ${verified ? 'PASSED' : 'FAILED'} (expected=${expectedNorm.substring(0,16)}, computed=${computedNorm.substring(0,16)})`);
+
+      return new Response(
+        JSON.stringify({
+          verified,
+          expectedHash: expectedNorm,
+          computedHash: computedNorm,
+          match: verified,
+          pngByteLength: pngBytes.length,
+        }),
+        { 
+          status: 200, 
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': 'application/json',
+            'X-RateLimit-Remaining': String(rateCheck.remaining),
+          } 
+        }
+      );
+
+    } catch (err) {
+      console.error(`[canonical-proxy] Verify error:`, err);
+      return createErrorResponse(400, 'Invalid request', err instanceof Error ? err.message : 'Failed to parse verify request', rateCheck.remaining);
     }
   } else {
     // This shouldn't happen due to allowlist check above, but just in case
