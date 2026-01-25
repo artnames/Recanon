@@ -257,7 +257,8 @@ serve(async (req) => {
     try {
       const parsed = JSON.parse(verifyBody);
       const snapshot = parsed.snapshot || parsed;
-      const expectedHash = parsed.expectedImageHash || parsed.expectedPosterHash || parsed.posterHash;
+      // Support multiple hash field names from different client versions
+      const expectedHash = parsed.expectedHash || parsed.expectedImageHash || parsed.expectedPosterHash || parsed.posterHash;
       
       if (!snapshot.code || typeof snapshot.code !== 'string') {
         return createErrorResponse(400, 'Invalid request', 'Missing snapshot.code for verification', rateCheck.remaining);
