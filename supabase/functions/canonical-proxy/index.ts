@@ -148,10 +148,14 @@ serve(async (req) => {
     );
   }
 
+  // Get API key for authenticated endpoints
+  const CANONICAL_RENDERER_API_KEY = Deno.env.get('CANONICAL_RENDERER_API_KEY');
+
   // Route handling
   let targetPath: string;
   let method = req.method;
   let body: string | null = null;
+  let requiresAuth = false;
 
   if (path === '/health' || path === '' || path === '/') {
     targetPath = '/health';
@@ -160,7 +164,9 @@ serve(async (req) => {
     if (method !== 'POST') {
       return createErrorResponse(405, 'Method not allowed', 'POST required for /render', rateCheck.remaining);
     }
-    targetPath = '/render';
+    // Use authenticated /api/render endpoint
+    targetPath = '/api/render';
+    requiresAuth = true;
     
     // ========== SECURITY: Payload size limit ==========
     const contentLength = req.headers.get('content-length');
@@ -218,7 +224,9 @@ serve(async (req) => {
     if (method !== 'POST') {
       return createErrorResponse(405, 'Method not allowed', 'POST required for /verify', rateCheck.remaining);
     }
-    targetPath = '/verify';
+    // Use authenticated /api/verify endpoint
+    targetPath = '/api/verify';
+    requiresAuth = true;
     
     // Payload size limit for verify
     const contentLength = req.headers.get('content-length');
@@ -250,12 +258,31 @@ serve(async (req) => {
   const targetUrl = `${CANONICAL_RENDERER_URL}${targetPath}`;
   console.log(`[canonical-proxy] Proxying ${method} ${path} -> ${targetUrl}`);
 
+  // Check if API key is required but not configured
+  if (requiresAuth && !CANONICAL_RENDERER_API_KEY) {
+    console.error('[canonical-proxy] CANONICAL_RENDERER_API_KEY secret not configured for authenticated endpoint');
+    return createErrorResponse(
+      500,
+      'Proxy not configured',
+      'Missing CANONICAL_RENDERER_API_KEY secret. Contact administrator.'
+    );
+  }
+
   try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+      'X-Request-Id': crypto.randomUUID(),
+    };
+
+    // Add API key for authenticated endpoints
+    if (requiresAuth && CANONICAL_RENDERER_API_KEY) {
+      headers['Authorization'] = `Bearer ${CANONICAL_RENDERER_API_KEY}`;
+    }
+
     const fetchOptions: RequestInit = {
       method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
     };
 
     if (body) {
