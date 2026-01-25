@@ -352,8 +352,14 @@ serve(async (req) => {
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       const imageHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
       
-      // Convert to base64
-      const base64 = btoa(String.fromCharCode(...pngBytes));
+      // Convert to base64 using chunked approach to avoid stack overflow
+      let base64 = '';
+      const chunkSize = 32768; // Process 32KB at a time
+      for (let i = 0; i < pngBytes.length; i += chunkSize) {
+        const chunk = pngBytes.subarray(i, Math.min(i + chunkSize, pngBytes.length));
+        base64 += String.fromCharCode.apply(null, Array.from(chunk));
+      }
+      base64 = btoa(base64);
       
       console.log(`[canonical-proxy] PNG response: ${pngBytes.length} bytes, hash=${imageHash.substring(0, 16)}...`);
       
